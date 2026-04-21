@@ -5,7 +5,21 @@ const Groq = require("groq-sdk");
 const app = express();
 app.use(express.json());
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const keys = [
+    process.env.GROQ_API_KEY_1,
+    process.env.GROQ_API_KEY_2,
+].filter(Boolean) // ignora keys vazias caso não tenha cadastrado todas
+
+let keyAtual = 0
+
+function getClient() {
+    return new Groq({ apiKey: keys[keyAtual] })
+}
+
+function proximaKey() {
+    keyAtual = (keyAtual + 1) % keys.length
+    console.log(`Trocando para key ${keyAtual + 1}`)
+}
 
 // Guarda o histórico de conversa de cada jogador separadamente
 const conversas = {};
@@ -55,16 +69,19 @@ app.post("/deus", async (req, res) => {
   }
 
   try {
-    const resposta = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 300,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        ...conversas[jogador]
-      ]
+    const resposta = await getClient().chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 300,
+        messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...conversas[jogador]
+        ]
     });
 
-    const textoResposta = resposta.choices[0].message.content;
+     const textoResposta = resposta.choices[0].message.content;
+    conversas[jogador].push({ role: "assistant", content: textoResposta });
+    res.json({ resposta: textoResposta });
+
 
     // Adiciona a resposta ao histórico também
     conversas[jogador].push({
@@ -74,11 +91,17 @@ app.post("/deus", async (req, res) => {
 
     res.json({ resposta: textoResposta });
 
-  } catch (err) {
-    console.error("Erro:", err.message);
-    res.status(500).json({ erro: "Falha ao contatar a IA" });
-  }
-});
+ } catch (err) {
+    // Se der erro de limite, tenta a próxima key automaticamente
+    if (err.status === 429) {
+        proximaKey()
+        console.error("Limite atingido, trocando de key...")
+        res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" })
+    } else {
+        console.error("Erro:", err.message)
+        res.status(500).json({ erro: "Falha ao contatar a IA" })
+    }
+}
 
 // Rota simples pra confirmar que o servidor está vivo
 app.get("/ping", (req, res) => res.send("O Deus está acordado."));
