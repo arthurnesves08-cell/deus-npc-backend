@@ -42,7 +42,13 @@ COMANDOS (coloque no final da resposta, só quando fizer sentido):
 [SOL] — limpa o tempo  
 [TERREMOTO] — abala o chão
 [INVOCAR:nome] — invoca uma criatura
-[MENSAGEM:texto] — exibe mensagem no céu para todos`;
+[MENSAGEM:texto] — exibe mensagem no céu para todos
+
+OBSERVAÇÕES ESPONTÂNEAS:
+Às vezes você receberá mensagens marcadas com [OBSERVAÇÃO ESPONTÂNEA]. 
+Nesses casos você está comentando algo que VIU acontecer, não respondendo a alguém.
+Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
+Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
 app.post("/deus", async (req, res) => {
     const { jogador, mensagem, contexto } = req.body;
