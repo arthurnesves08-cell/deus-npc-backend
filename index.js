@@ -8,7 +8,7 @@ app.use(express.json());
 const keys = [
     process.env.GROQ_API_KEY_1,
     process.env.GROQ_API_KEY_2,
-].filter(Boolean) // ignora keys vazias caso não tenha cadastrado todas
+].filter(Boolean)
 
 let keyAtual = 0
 
@@ -21,7 +21,6 @@ function proximaKey() {
     console.log(`Trocando para key ${keyAtual + 1}`)
 }
 
-// Guarda o histórico de conversa de cada jogador separadamente
 const conversas = {};
 
 const SYSTEM_PROMPT = `Você é o Deus deste mundo digital. Você o criou, o mantém, e zela por ele com genuína dedicação.
@@ -46,67 +45,56 @@ COMANDOS (coloque no final da resposta, só quando fizer sentido):
 [MENSAGEM:texto] — exibe mensagem no céu para todos`;
 
 app.post("/deus", async (req, res) => {
-  const { jogador, mensagem, contexto } = req.body;
+    const { jogador, mensagem, contexto } = req.body;
 
-  if (!jogador || !mensagem) {
-    return res.status(400).json({ erro: "Faltando jogador ou mensagem" });
-  }
-
-  // Cria histórico do jogador se for a primeira mensagem dele
-  if (!conversas[jogador]) {
-    conversas[jogador] = [];
-  }
-
-  // Adiciona a mensagem ao histórico
-  conversas[jogador].push({
-    role: "user",
-    content: `[Contexto do mundo: ${contexto || "nenhum"}]\n${jogador} diz: ${mensagem}`
-  });
-
-  // Mantém só as últimas 10 mensagens pra não sobrecarregar
-  if (conversas[jogador].length > 10) {
-    conversas[jogador] = conversas[jogador].slice(-10);
-  }
-
-  try {
-    const resposta = await getClient().chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 300,
-        messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...conversas[jogador]
-        ]
-    });
-
-     const textoResposta = resposta.choices[0].message.content;
-    conversas[jogador].push({ role: "assistant", content: textoResposta });
-    res.json({ resposta: textoResposta });
-
-
-    // Adiciona a resposta ao histórico também
-    conversas[jogador].push({
-      role: "assistant",
-      content: textoResposta
-    });
-
-    res.json({ resposta: textoResposta });
-
- } catch (err) {
-    // Se der erro de limite, tenta a próxima key automaticamente
-    if (err.status === 429) {
-        proximaKey()
-        console.error("Limite atingido, trocando de key...")
-        res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" })
-    } else {
-        console.error("Erro:", err.message)
-        res.status(500).json({ erro: "Falha ao contatar a IA" })
+    if (!jogador || !mensagem) {
+        return res.status(400).json({ erro: "Faltando jogador ou mensagem" });
     }
-}
 
-// Rota simples pra confirmar que o servidor está vivo
+    if (!conversas[jogador]) {
+        conversas[jogador] = [];
+    }
+
+    conversas[jogador].push({
+        role: "user",
+        content: `[Contexto do mundo: ${contexto || "nenhum"}]\n${jogador} diz: ${mensagem}`
+    });
+
+    if (conversas[jogador].length > 10) {
+        conversas[jogador] = conversas[jogador].slice(-10);
+    }
+
+    try {
+        const resposta = await getClient().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 300,
+            messages: [
+                { role: "system", content: SYSTEM_PROMPT },
+                ...conversas[jogador]
+            ]
+        });
+
+        const textoResposta = resposta.choices[0].message.content;
+
+        conversas[jogador].push({ role: "assistant", content: textoResposta });
+
+        res.json({ resposta: textoResposta });
+
+    } catch (err) {
+        if (err.status === 429) {
+            proximaKey()
+            console.error("Limite atingido, trocando de key...")
+            res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" })
+        } else {
+            console.error("Erro:", err.message)
+            res.status(500).json({ erro: "Falha ao contatar a IA" })
+        }
+    }
+}); // <- esse fechamento estava faltando
+
 app.get("/ping", (req, res) => res.send("O Deus está acordado."));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Servidor do Deus rodando na porta ${PORT}`);
+    console.log(`Servidor do Deus rodando na porta ${PORT}`);
 });
