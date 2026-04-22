@@ -230,7 +230,8 @@ try {
     }
 } catch (err) {
     console.error("Erro ao gerar áudio:", err.message);
-    // Não quebra o fluxo — o jogo continua mesmo sem áudio
+    console.error("Status do erro:", err.response?.status);
+    console.error("Detalhe:", JSON.stringify(err.response?.data));
 }
 
 res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
