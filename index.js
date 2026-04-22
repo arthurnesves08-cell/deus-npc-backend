@@ -142,7 +142,30 @@ app.post("/deus", async (req, res) => {
 
         conversas[jogador].push({ role: "assistant", content: textoResposta });
 
-        res.json({ resposta: textoResposta });
+        // Detecta o estado emocional pelo conteúdo da resposta
+let estado = "calmo";
+let nivelRaiva = 0;
+
+const textoLower = textoResposta.toLowerCase();
+
+if (textoLower.includes("...") || textoLower.includes("por que") || textoLower.includes("hmm")) {
+    estado = "pensando";
+} else if (
+    textoLower.includes("!") ||
+    textoLower.includes("pressão") ||
+    textoLower.includes("controle") ||
+    textoLower.includes("basta") ||
+    textoLower.includes("cale") ||
+    textoLower.includes("silêncio") ||
+    textoLower.includes("eles não") ||
+    textoLower.includes("eu não")
+) {
+    estado = "raiva";
+    nivelRaiva = textoResposta.split("!").length * 25; // mais ! = mais raiva
+    nivelRaiva = Math.min(nivelRaiva, 100);
+}
+
+res.json({ resposta: textoResposta, estado, nivelRaiva });
 
     } catch (err) {
         if (err.status === 429) {
