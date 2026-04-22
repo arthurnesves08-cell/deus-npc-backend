@@ -108,6 +108,61 @@ Nesses casos você está comentando algo que VIU acontecer, não respondendo a a
 Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
 Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
+const axios = require("axios");
+const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
+
+// Gera áudio no ElevenLabs e retorna o buffer
+async function gerarAudio(texto) {
+    // Remove comandos do texto antes de mandar para o ElevenLabs
+    const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
+    if (!textoLimpo) return null;
+
+    const response = await axios({
+        method: "POST",
+        url: `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}`,
+        headers: {
+            "xi-api-key": process.env.ELEVENLABS_API_KEY,
+            "Content-Type": "application/json",
+        },
+        data: {
+            text: textoLimpo,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+                stability: 0.3,        // baixo = mais variação e glitch
+                similarity_boost: 0.8,
+                style: 0.5,
+                use_speaker_boost: true
+            }
+        },
+        responseType: "arraybuffer"
+    });
+
+    return Buffer.from(response.data);
+}
+
+// Hospeda o áudio temporariamente e retorna a URL
+async function hospedarAudio(buffer) {
+    const form = new FormData();
+    form.append("file", buffer, {
+        filename: "explosm.mp3",
+        contentType: "audio/mpeg"
+    });
+
+    const response = await axios.post("https://tmpfiles.org/api/v1/upload", form, {
+        headers: form.getHeaders()
+    });
+
+    // Converte a URL para o formato direto de download
+    const url = response.data.data.url.replace(
+        "tmpfiles.org/",
+        "tmpfiles.org/dl/"
+    );
+
+    return url;
+}
+
 app.post("/deus", async (req, res) => {
     const { jogador, mensagem, contexto } = req.body;
 
@@ -165,7 +220,20 @@ if (textoLower.includes("...") || textoLower.includes("por que") || textoLower.i
     nivelRaiva = Math.min(nivelRaiva, 100);
 }
 
-res.json({ resposta: textoResposta, estado, nivelRaiva });
+// Gera o áudio em paralelo com a resposta
+let urlAudio = null;
+try {
+    const audioBuffer = await gerarAudio(textoResposta);
+    if (audioBuffer) {
+        urlAudio = await hospedarAudio(audioBuffer);
+        console.log("Áudio gerado:", urlAudio);
+    }
+} catch (err) {
+    console.error("Erro ao gerar áudio:", err.message);
+    // Não quebra o fluxo — o jogo continua mesmo sem áudio
+}
+
+res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
 
     } catch (err) {
         if (err.status === 429) {
