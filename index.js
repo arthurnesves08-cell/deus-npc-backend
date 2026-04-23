@@ -2,10 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const Groq = require("groq-sdk");
 
-const edgeTTS = require("edge-tts");
-const fs = require("fs");
+const { MsEdgeTTS, OUTPUT_FORMAT } = require("msedge-tts");
 const os = require("os");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 app.use(express.json());
@@ -120,32 +120,21 @@ async function gerarAudio(texto) {
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    // Arquivo temporário para salvar o áudio
     const arquivoTemp = path.join(os.tmpdir(), `explosm_${Date.now()}.mp3`);
 
-    const tts = new edgeTTS.MsEdgeTTS();
+    const tts = new MsEdgeTTS();
     await tts.setMetadata(
         "pt-BR-AntonioNeural",
-        edgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+        OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
     );
 
-    // Parâmetros de voz — pitch baixo e rate lento deixa mais sinistro
-    const ssml = `
-        <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
-            <voice name="pt-BR-AntonioNeural">
-                <prosody pitch="-20Hz" rate="-15%" volume="100">
-                    ${textoLimpo}
-                </prosody>
-            </voice>
-        </speak>
-    `;
+    await tts.toFile(arquivoTemp, textoLimpo, {
+        pitch: "-20Hz",
+        rate: "-15%",
+        volume: "+0%"
+    });
 
-    await tts.toFile(arquivoTemp, ssml);
-
-    // Lê o arquivo e retorna como buffer
     const buffer = fs.readFileSync(arquivoTemp);
-
-    // Remove o arquivo temporário
     fs.unlinkSync(arquivoTemp);
 
     return buffer;
