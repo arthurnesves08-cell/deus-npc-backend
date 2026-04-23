@@ -140,14 +140,77 @@ async function gerarAudio(texto) {
 
 // Hospeda o áudio temporariamente e retorna a URL
 async function hospedarAudio(buffer) {
-    // Gera um ID único para o arquivo
-    const id = Date.now().toString();
-    audioCache[id] = buffer;
+    // Monta o multipart manualmente pois o Roblox exige formato específico
+    const boundary = "----FormBoundary" + Date.now();
+    
+    const metadados = JSON.stringify({
+        assetType: "Audio",
+        displayName: "explosm_" + Date.now(),
+        description: "Voz do E.X.P.L.O.S.M",
+        creationContext: {
+            creator: {
+                userId: process.env.ROBLOX_USER_ID
+            }
+        }
+    });
 
-    // Remove da memória depois de 5 minutos
-    setTimeout(() => { delete audioCache[id]; }, 5 * 60 * 1000);
+    // Monta o body manualmente
+    const parteMetadados = Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="request"\r\n` +
+        `Content-Type: application/json\r\n\r\n` +
+        `${metadados}\r\n`
+    );
 
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/audio/${id}`;
+    const parteAudio = Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="fileContent"; filename="explosm.mp3"\r\n` +
+        `Content-Type: audio/mpeg\r\n\r\n`
+    );
+
+    const fechamento = Buffer.from(`\r\n--${boundary}--\r\n`);
+
+    const bodyCompleto = Buffer.concat([parteMetadados, parteAudio, buffer, fechamento]);
+
+    // Faz o upload para o Roblox
+    const response = await axios({
+        method: "POST",
+        url: "https://apis.roblox.com/assets/v1/assets",
+        headers: {
+            "x-api-key": process.env.ROBLOX_API_KEY,
+            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            "Content-Length": bodyCompleto.length
+        },
+        data: bodyCompleto,
+        maxBodyLength: Infinity
+    });
+
+    console.log("Upload Roblox resposta:", JSON.stringify(response.data));
+
+    // O Roblox retorna uma operação assíncrona — precisamos esperar ela terminar
+    const operationId = response.data.path;
+    if (!operationId) throw new Error("Operation ID não retornado: " + JSON.stringify(response.data));
+
+    // Aguarda o processamento (tenta por até 30 segundos)
+    for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+
+        const statusResp = await axios({
+            method: "GET",
+            url: `https://apis.roblox.com/${operationId}`,
+            headers: { "x-api-key": process.env.ROBLOX_API_KEY }
+        });
+
+        console.log("Status do upload:", JSON.stringify(statusResp.data));
+
+        if (statusResp.data.done) {
+            const assetId = statusResp.data.response?.assetId;
+            if (!assetId) throw new Error("Asset ID não encontrado na resposta");
+            return `rbxassetid://${assetId}`;
+        }
+    }
+
+    throw new Error("Timeout aguardando processamento do áudio");
 }
 
 app.post("/deus", async (req, res) => {
