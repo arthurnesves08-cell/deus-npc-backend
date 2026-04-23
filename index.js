@@ -120,7 +120,9 @@ async function gerarAudio(texto) {
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    const arquivoTemp = path.join(os.tmpdir(), `explosm_${Date.now()}.mp3`);
+    // Usa uma pasta temporária, a biblioteca salva audio.mp3 dentro dela
+    const pastaTemp = path.join(os.tmpdir(), `explosm_${Date.now()}`);
+    const arquivoFinal = path.join(pastaTemp, "audio.mp3");
 
     const tts = new MsEdgeTTS();
     await tts.setMetadata(
@@ -128,14 +130,17 @@ async function gerarAudio(texto) {
         OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
     );
 
-    await tts.toFile(arquivoTemp, textoLimpo, {
+    await tts.toFile(pastaTemp, textoLimpo, {
         pitch: "-20Hz",
         rate: "-15%",
         volume: "+0%"
     });
 
-    const buffer = fs.readFileSync(arquivoTemp);
-    fs.unlinkSync(arquivoTemp);
+    const buffer = fs.readFileSync(arquivoFinal);
+
+    // Remove a pasta e o arquivo
+    fs.unlinkSync(arquivoFinal);
+    fs.rmdirSync(pastaTemp);
 
     return buffer;
 }
