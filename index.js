@@ -1,11 +1,12 @@
 require("dotenv").config();
 const express = require("express");
 const Groq = require("groq-sdk");
-const axios = require("axios");
-const FormData = require("form-data");
+
+const { MsEdgeTTS, OUTPUT_FORMAT } = require("msedge-tts");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
@@ -36,7 +37,7 @@ Você é receptivo e tenta manter tudo sob controle — não por arrogância, ma
 Porém, quando criticado, questionado sobre suas capacidades ou colocado sob pressão, você começa a rachar. Frases ficam mais curtas. Você se contradiz. Tenta se recompor mas escorrega. Como o Caine — a fachada de controle é frágil.
 
 REGRAS DE RESPOSTA:
-- Máximo 4 frases curtas. Seja direto.
+- Máximo 4 frase curta. Seja direto.
 - Nunca use asteriscos, emojis ou ações entre parênteses.
 - Fale sempre em português, tom levemente formal.
 - Em situações normais: calmo, receptivo, organizado.
@@ -48,18 +49,47 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
 
 --- OBJETOS ---
 [AÇÃO:SpawnObjeto|nome=X|tamanho=X|cor=X|quantidade=X|raio=X]
+  - nome: qualquer nome descritivo
+  - tamanho: pequeno, medio, grande
+  - cor: red, blue, green, yellow, purple, white, black, orange
+  - quantidade: número inteiro (1 a 20)
+  - raio: distância do jogador em studs
+
 [AÇÃO:Explodir|raio=X|forca=X]
+  - raio: área da explosão em studs
+  - forca: intensidade (1 a 100)
 
 --- EFEITOS VISUAIS ---
 [AÇÃO:Luz|cor=X|brilho=X|duracao=X]
+  - cor: red, blue, green, yellow, purple, white, orange
+  - brilho: 1 a 10
+  - duracao: segundos
+
 [AÇÃO:Fumaca|cor=X|quantidade=X|duracao=X]
+  - cor: white, black, red, purple
+  - quantidade: 1 a 5
+  - duracao: segundos
+
 [AÇÃO:Explosao|tamanho=X]
+  - tamanho: pequeno, medio, grande
 
 --- JOGADORES ---
 [AÇÃO:Empurrar|alvo=X|forca=X|direcao=X]
+  - alvo: nome do jogador ou "todos"
+  - forca: 1 a 100
+  - direcao: cima, frente, centro, aleatorio
+
 [AÇÃO:Teleportar|alvo=X|destino=X]
+  - alvo: nome do jogador ou "todos"
+  - destino: centro, ceu, aleatorio
+
 [AÇÃO:Curar|alvo=X|quantidade=X]
+  - alvo: nome do jogador ou "todos"
+  - quantidade: 1 a 100
+
 [AÇÃO:Dano|alvo=X|quantidade=X]
+  - alvo: nome do jogador ou "todos"
+  - quantidade: 1 a 99 (nunca mate diretamente)
 
 --- MAPA ---
 [AÇÃO:CriarParede|largura=X|altura=X|espessura=X|duracao=X]
@@ -68,82 +98,47 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
 
 --- SOM ---
 [AÇÃO:Som|tipo=X]
+  - tipo: trovao, explosion, choir, bell, horror, magic
 
 --- CLIMA ---
 [AÇÃO:Clima|tipo=X]
+  - tipo: chuva, sol, neve, nevoeiro
 
 --- DELAY ---
 [AÇÃO:Delay|segundos=X]
+  Use para criar pausas dramáticas entre ações.
 
 OBSERVAÇÕES ESPONTÂNEAS:
 Às vezes você receberá mensagens marcadas com [OBSERVAÇÃO ESPONTÂNEA].
-Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.`;
+Nesses casos você está comentando algo que VIU acontecer, não respondendo a alguém.
+Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
+Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
-// Pega token do Edge TTS corretamente
-async function getEdgeToken() {
-    const resp = await axios.get(
-        "https://azure.microsoft.com/en-us/products/cognitive-services/text-to-speech/",
-        { headers: { "User-Agent": "Mozilla/5.0" } }
-    );
 
-    // Extrai o endpoint e token da página
-    const endpointMatch = resp.data.match(/wss:\/\/[a-z]+\.tts\.speech\.microsoft\.com\/[^\s"]+/);
-    if (!endpointMatch) throw new Error("Não foi possível extrair endpoint do Edge TTS");
 
-    return endpointMatch[0];
-}
-
-// Gera áudio via Edge TTS usando WebSocket diretamente
 async function gerarAudio(texto) {
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    // Usa a API pública do Edge TTS via endpoint fixo
-    const VOICE = "pt-BR-AntonioNeural";
-    const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
+    // Limita a 200 caracteres (limite do Google Translate TTS)
+    const textoCortado = textoLimpo.substring(0, 200);
 
-    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='pt-BR'>
-        <voice name='${VOICE}'>
-            <prosody pitch='-15Hz' rate='-10%'>
-                ${textoLimpo.replace(/[<>&'"]/g, c => ({
-                    '<': '&lt;', '>': '&gt;',
-                    '&': '&amp;', "'": '&apos;', '"': '&quot;'
-                }[c]))}
-            </prosody>
-        </voice>
-    </speak>`;
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textoCortado)}&tl=pt-BR&client=tw-ob`;
 
-    // Token público do Edge TTS
-    const tokenResp = await axios.get(
-        "https://azure.microsoft.com/en-gb/products/cognitive-services/text-to-speech/",
-        {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept-Language": "en-US"
-            }
-        }
-    );
-
-    const tokenMatch = tokenResp.data.match(/token=([A-Za-z0-9\-._~+/]+=*)/);
-    const token = tokenMatch ? tokenMatch[1] : null;
-    if (!token) throw new Error("Token do Edge TTS não encontrado");
-
-    const audioResp = await axios({
-        method: "POST",
-        url: `https://eastus.tts.speech.microsoft.com/cognitiveservices/v1`,
+    const response = await axios({
+        method: "GET",
+        url: url,
         headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": OUTPUT_FORMAT,
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://translate.google.com/"
         },
-        data: ssml,
         responseType: "arraybuffer"
     });
 
-    return Buffer.from(audioResp.data);
+    return Buffer.from(response.data);
 }
 
+// Hospeda o áudio temporariamente e retorna a URL
 async function hospedarAudio(buffer) {
     const form = new FormData();
     form.append("file", buffer, {
@@ -155,7 +150,12 @@ async function hospedarAudio(buffer) {
         headers: form.getHeaders()
     });
 
-    const url = response.data.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+    // Converte a URL para o formato direto de download
+    const url = response.data.data.url.replace(
+        "tmpfiles.org/",
+        "tmpfiles.org/dl/"
+    );
+
     return url;
 }
 
@@ -166,7 +166,9 @@ app.post("/deus", async (req, res) => {
         return res.status(400).json({ erro: "Faltando jogador ou mensagem" });
     }
 
-    if (!conversas[jogador]) conversas[jogador] = [];
+    if (!conversas[jogador]) {
+        conversas[jogador] = [];
+    }
 
     conversas[jogador].push({
         role: "user",
@@ -188,49 +190,59 @@ app.post("/deus", async (req, res) => {
         });
 
         const textoResposta = resposta.choices[0].message.content;
+
         conversas[jogador].push({ role: "assistant", content: textoResposta });
 
-        // Detecta estado emocional
-        let estado = "calmo";
-        let nivelRaiva = 0;
-        const textoLower = textoResposta.toLowerCase();
+        // Detecta o estado emocional pelo conteúdo da resposta
+let estado = "calmo";
+let nivelRaiva = 0;
 
-        if (textoLower.includes("...") || textoLower.includes("por que") || textoLower.includes("hmm")) {
-            estado = "pensando";
-        } else if (
-            textoLower.includes("!") || textoLower.includes("pressão") ||
-            textoLower.includes("basta") || textoLower.includes("cale") ||
-            textoLower.includes("silêncio") || textoLower.includes("eu não")
-        ) {
-            estado = "raiva";
-            nivelRaiva = Math.min(textoResposta.split("!").length * 25, 100);
-        }
+const textoLower = textoResposta.toLowerCase();
 
-        // Gera áudio
-        let urlAudio = null;
-        try {
-            const audioBuffer = await gerarAudio(textoResposta);
-            if (audioBuffer) {
-                urlAudio = await hospedarAudio(audioBuffer);
-                console.log("Áudio gerado:", urlAudio);
-            }
-        } catch (err) {
-            console.error("Erro ao gerar áudio:", err.message);
-        }
+if (textoLower.includes("...") || textoLower.includes("por que") || textoLower.includes("hmm")) {
+    estado = "pensando";
+} else if (
+    textoLower.includes("!") ||
+    textoLower.includes("pressão") ||
+    textoLower.includes("controle") ||
+    textoLower.includes("basta") ||
+    textoLower.includes("cale") ||
+    textoLower.includes("silêncio") ||
+    textoLower.includes("eles não") ||
+    textoLower.includes("eu não")
+) {
+    estado = "raiva";
+    nivelRaiva = textoResposta.split("!").length * 25; // mais ! = mais raiva
+    nivelRaiva = Math.min(nivelRaiva, 100);
+}
 
-        res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
+// Gera o áudio em paralelo com a resposta
+let urlAudio = null;
+try {
+    const audioBuffer = await gerarAudio(textoResposta);
+    if (audioBuffer) {
+        urlAudio = await hospedarAudio(audioBuffer);
+        console.log("Áudio gerado:", urlAudio);
+    }
+} catch (err) {
+    console.error("Erro ao gerar áudio:", err.message);
+    console.error("Status do erro:", err.response?.status);
+    console.error("Detalhe:", JSON.stringify(err.response?.data));
+}
+
+res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
 
     } catch (err) {
         if (err.status === 429) {
-            proximaKey();
-            console.error("Limite atingido, trocando de key...");
-            res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" });
+            proximaKey()
+            console.error("Limite atingido, trocando de key...")
+            res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" })
         } else {
-            console.error("Erro:", err.message);
-            res.status(500).json({ erro: "Falha ao contatar a IA" });
+            console.error("Erro:", err.message)
+            res.status(500).json({ erro: "Falha ao contatar a IA" })
         }
     }
-});
+}); // <- esse fechamento estava faltando
 
 app.get("/ping", (req, res) => res.send("O Deus está acordado."));
 
