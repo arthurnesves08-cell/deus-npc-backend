@@ -141,21 +141,14 @@ async function gerarAudio(texto) {
 // Hospeda o áudio temporariamente e retorna a URL
 async function hospedarAudio(buffer) {
     const form = new FormData();
-    form.append("file", buffer, {
-        filename: "explosm.mp3",
-        contentType: "audio/mpeg"
-    });
+    
+    // Converte o buffer para Blob antes de anexar
+    const blob = new Blob([buffer], { type: "audio/mpeg" });
+    form.append("file", blob, "explosm.mp3");
 
-    const response = await axios.post("https://tmpfiles.org/api/v1/upload", form, {
-        headers: form.getHeaders()
-    });
+    const response = await axios.post("https://tmpfiles.org/api/v1/upload", form);
 
-    // Converte a URL para o formato direto de download
-    const url = response.data.data.url.replace(
-        "tmpfiles.org/",
-        "tmpfiles.org/dl/"
-    );
-
+    const url = response.data.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
     return url;
 }
 
