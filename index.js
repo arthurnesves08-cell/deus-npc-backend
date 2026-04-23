@@ -116,13 +116,13 @@ Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
 
 
+const audioCache = {}; // guarda os buffers em memória temporariamente
+
 async function gerarAudio(texto) {
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    // Limita a 200 caracteres (limite do Google Translate TTS)
     const textoCortado = textoLimpo.substring(0, 200);
-
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textoCortado)}&tl=pt-BR&client=tw-ob`;
 
     const response = await axios({
@@ -140,18 +140,14 @@ async function gerarAudio(texto) {
 
 // Hospeda o áudio temporariamente e retorna a URL
 async function hospedarAudio(buffer) {
-    const form = new FormData();
-    const blob = new Blob([buffer], { type: "audio/mpeg" });
-    form.append("file", blob, "explosm.mp3");
+    // Gera um ID único para o arquivo
+    const id = Date.now().toString();
+    audioCache[id] = buffer;
 
-    const response = await axios.post("https://file.io/?expires=1h", form);
+    // Remove da memória depois de 5 minutos
+    setTimeout(() => { delete audioCache[id]; }, 5 * 60 * 1000);
 
-    if (!response.data.success) {
-        throw new Error("file.io falhou: " + JSON.stringify(response.data));
-    }
-
-    console.log("URL gerada:", response.data.link);
-    return response.data.link;
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/audio/${id}`;
 }
 
 app.post("/deus", async (req, res) => {
@@ -238,6 +234,16 @@ res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
         }
     }
 }); // <- esse fechamento estava faltando
+
+app.get("/audio/:id", (req, res) => {
+    const buffer = audioCache[req.params.id];
+    if (!buffer) {
+        return res.status(404).send("Áudio não encontrado");
+    }
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(buffer);
+});
 
 app.get("/ping", (req, res) => res.send("O Deus está acordado."));
 
