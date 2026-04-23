@@ -2,6 +2,11 @@ require("dotenv").config();
 const express = require("express");
 const Groq = require("groq-sdk");
 
+const edgeTTS = require("edge-tts");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
 const app = express();
 app.use(express.json());
 
@@ -108,38 +113,42 @@ Nesses casos você está comentando algo que VIU acontecer, não respondendo a a
 Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
 Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
-const axios = require("axios");
-const FormData = require("form-data");
-const fs = require("fs");
-const path = require("path");
 
-// Gera áudio no ElevenLabs e retorna o buffer
+
+// Gera áudio usando Microsoft Edge TTS
 async function gerarAudio(texto) {
-    // Remove comandos do texto antes de mandar para o ElevenLabs
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    const response = await axios({
-        method: "POST",
-        url: `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}`,
-        headers: {
-            "xi-api-key": process.env.ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-        },
-        data: {
-            text: textoLimpo,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-                stability: 0.3,        // baixo = mais variação e glitch
-                similarity_boost: 0.8,
-                style: 0.5,
-                use_speaker_boost: true
-            }
-        },
-        responseType: "arraybuffer"
-    });
+    // Arquivo temporário para salvar o áudio
+    const arquivoTemp = path.join(os.tmpdir(), `explosm_${Date.now()}.mp3`);
 
-    return Buffer.from(response.data);
+    const tts = new edgeTTS.MsEdgeTTS();
+    await tts.setMetadata(
+        "pt-BR-AntonioNeural",
+        edgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+    );
+
+    // Parâmetros de voz — pitch baixo e rate lento deixa mais sinistro
+    const ssml = `
+        <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
+            <voice name="pt-BR-AntonioNeural">
+                <prosody pitch="-20Hz" rate="-15%" volume="100">
+                    ${textoLimpo}
+                </prosody>
+            </voice>
+        </speak>
+    `;
+
+    await tts.toFile(arquivoTemp, ssml);
+
+    // Lê o arquivo e retorna como buffer
+    const buffer = fs.readFileSync(arquivoTemp);
+
+    // Remove o arquivo temporário
+    fs.unlinkSync(arquivoTemp);
+
+    return buffer;
 }
 
 // Hospeda o áudio temporariamente e retorna a URL
