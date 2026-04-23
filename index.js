@@ -55,6 +55,15 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
   - quantidade: número inteiro (1 a 20)
   - raio: distância do jogador em studs
 
+  --- NPCS ---
+[AÇÃO:InvocarNPC|nome=X|quantidade=X]
+  - nome: zombie, obama, npcaleatorio
+  - quantidade: 1 a 5
+
+--- ITENS ---
+[AÇÃO:SpawnarItem|nome=X]
+  - nome: ak47, hamburguer, mola
+
 [AÇÃO:Explodir|raio=X|forca=X]
   - raio: área da explosão em studs
   - forca: intensidade (1 a 100)
