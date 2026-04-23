@@ -120,29 +120,36 @@ async function gerarAudio(texto) {
     const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
     if (!textoLimpo) return null;
 
-    // Usa uma pasta temporária, a biblioteca salva audio.mp3 dentro dela
-    const pastaTemp = path.join(os.tmpdir(), `explosm_${Date.now()}`);
-    const arquivoFinal = path.join(pastaTemp, "audio.mp3");
+    // Monta o SSML com a voz robótica
+    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='pt-BR'>
+        <voice name='pt-BR-AntonioNeural'>
+            <prosody pitch='-20Hz' rate='-15%'>
+                ${textoLimpo}
+            </prosody>
+        </voice>
+    </speak>`;
 
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(
-        "pt-BR-AntonioNeural",
-        OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+    // Pega token de acesso do Edge TTS
+    const tokenResp = await axios.get(
+        "https://www.bing.com/tfsissue?tfstopic=tts&Referer=https://www.bing.com/&ClientId=&tf=edge"
     );
+    const token = tokenResp.headers["x-ttsclientmaxage"] || "";
 
-    await tts.toFile(pastaTemp, textoLimpo, {
-        pitch: "-20Hz",
-        rate: "-15%",
-        volume: "+0%"
+    // Chama a API diretamente
+    const audioResp = await axios({
+        method: "POST",
+        url: "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "User-Agent": "Mozilla/5.0"
+        },
+        data: ssml,
+        responseType: "arraybuffer"
     });
 
-    const buffer = fs.readFileSync(arquivoFinal);
-
-    // Remove a pasta e o arquivo
-    fs.unlinkSync(arquivoFinal);
-    fs.rmdirSync(pastaTemp);
-
-    return buffer;
+    return Buffer.from(audioResp.data);
 }
 
 // Hospeda o áudio temporariamente e retorna a URL
