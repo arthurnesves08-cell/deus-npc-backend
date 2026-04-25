@@ -227,7 +227,8 @@ app.get("/audio/:id", (req, res) => {
 app.post("/construir", async (req, res) => {
     const { tipo, posicao, jogador } = req.body;
 
-    let textoResposta = resposta.choices[0].message.content.trim();
+    let textoResposta = "";
+
     try {
         const resposta = await getClient().chat.completions.create({
             model: "llama-3.3-70b-versatile",
@@ -271,7 +272,8 @@ Regras:
             ]
         });
 
-       
+        // Atribui aqui, dentro do try, depois da chamada
+        textoResposta = resposta.choices[0].message.content.trim();
 
         // Remove possíveis blocos de código se a IA ignorar as instruções
         textoResposta = textoResposta.replace(/```json|```/g, "").trim();
@@ -282,9 +284,9 @@ Regras:
         res.json(plano);
 
     } catch (err) {
-         console.error("Erro ao gerar construção:", err.message);
-         console.error("Texto recebido da IA:", textoResposta);
-         res.status(500).json({ erro: "Falha ao gerar plano de construção", detalhe: err.message });
+        console.error("Erro ao gerar construção:", err.message);
+        console.error("Texto recebido da IA:", textoResposta);
+        res.status(500).json({ erro: "Falha ao gerar plano de construção", detalhe: err.message });
     }
 });
 
