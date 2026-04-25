@@ -218,6 +218,68 @@ app.get("/audio/:id", (req, res) => {
     res.send(buffer);
 });
 
+app.post("/construir", async (req, res) => {
+    const { tipo, posicao, jogador } = req.body;
+
+    try {
+        const resposta = await getClient().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 1500,
+            messages: [
+                {
+                    role: "system",
+                    content: `Você é um arquiteto divino. Gere planos de construção em JSON para o Roblox.
+Responda APENAS com JSON puro, sem markdown, sem explicações, sem blocos de código.
+
+O JSON deve ter este formato exato:
+{
+  "nome": "Nome da estrutura",
+  "fala": "Uma frase curta e dramática do Deus ao construir",
+  "blocos": [
+    {
+      "x": 0, "y": 0, "z": 0,
+      "sx": 4, "sy": 4, "sz": 4,
+      "cor": "r,g,b",
+      "material": "SmoothPlastic",
+      "delay": 0.0
+    }
+  ]
+}
+
+Regras:
+- x, y, z são posições relativas ao centro da construção
+- sx, sy, sz são tamanhos dos blocos em studs
+- cor é RGB separado por vírgula ex: "180,120,60"
+- material pode ser: SmoothPlastic, Neon, Marble, Granite, Brick, Wood, Metal, Glass
+- delay é o tempo em segundos antes de colocar este bloco (cria animação sequencial)
+- Use no máximo 40 blocos
+- Construções devem ser impressionantes e detalhadas
+- Varie os delays para criar efeito dramático de construção bloco a bloco
+- Blocos de base têm delay 0, depois vai construindo para cima com delays crescentes`
+                },
+                {
+                    role: "user",
+                    content: `Construa: ${tipo}. Centro em x:${posicao?.x || 0}, z:${posicao?.z || 0}. Jogador que pediu: ${jogador || "ninguém"}.`
+                }
+            ]
+        });
+
+        let textoResposta = resposta.choices[0].message.content.trim();
+
+        // Remove possíveis blocos de código se a IA ignorar as instruções
+        textoResposta = textoResposta.replace(/```json|```/g, "").trim();
+
+        const plano = JSON.parse(textoResposta);
+        console.log("Plano gerado:", plano.nome, "com", plano.blocos.length, "blocos");
+
+        res.json(plano);
+
+    } catch (err) {
+        console.error("Erro ao gerar construção:", err.message);
+        res.status(500).json({ erro: "Falha ao gerar plano de construção" });
+    }
+});
+
 app.get("/ping", (req, res) => res.send("O Deus está acordado."));
 
 const PORT = process.env.PORT || 3000;
