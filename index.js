@@ -2,11 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const Groq = require("groq-sdk");
 
-const { MsEdgeTTS, OUTPUT_FORMAT } = require("msedge-tts");
-const os = require("os");
-const path = require("path");
-const fs = require("fs");
-const axios = require("axios");
+
 
 const app = express();
 app.use(express.json());
@@ -125,102 +121,7 @@ Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
 
 
 
-const audioCache = {}; // guarda os buffers em memória temporariamente
 
-async function gerarAudio(texto) {
-    const textoLimpo = texto.replace(/\[.*?\]/g, "").trim();
-    if (!textoLimpo) return null;
-
-    const textoCortado = textoLimpo.substring(0, 200);
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textoCortado)}&tl=pt-BR&client=tw-ob`;
-
-    const response = await axios({
-        method: "GET",
-        url: url,
-        headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://translate.google.com/"
-        },
-        responseType: "arraybuffer"
-    });
-
-    return Buffer.from(response.data);
-}
-
-// Hospeda o áudio temporariamente e retorna a URL
-async function hospedarAudio(buffer) {
-    // Monta o multipart manualmente pois o Roblox exige formato específico
-    const boundary = "----FormBoundary" + Date.now();
-    
-    const metadados = JSON.stringify({
-        assetType: "Audio",
-        displayName: "explosm_" + Date.now(),
-        description: "Voz do E.X.P.L.O.S.M",
-        creationContext: {
-            creator: {
-                userId: process.env.ROBLOX_USER_ID
-            }
-        }
-    });
-
-    // Monta o body manualmente
-    const parteMetadados = Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="request"\r\n` +
-        `Content-Type: application/json\r\n\r\n` +
-        `${metadados}\r\n`
-    );
-
-    const parteAudio = Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="fileContent"; filename="explosm.mp3"\r\n` +
-        `Content-Type: audio/mpeg\r\n\r\n`
-    );
-
-    const fechamento = Buffer.from(`\r\n--${boundary}--\r\n`);
-
-    const bodyCompleto = Buffer.concat([parteMetadados, parteAudio, buffer, fechamento]);
-
-    // Faz o upload para o Roblox
-    const response = await axios({
-        method: "POST",
-        url: "https://apis.roblox.com/assets/v1/assets",
-        headers: {
-            "x-api-key": process.env.ROBLOX_API_KEY,
-            "Content-Type": `multipart/form-data; boundary=${boundary}`,
-            "Content-Length": bodyCompleto.length
-        },
-        data: bodyCompleto,
-        maxBodyLength: Infinity
-    });
-
-    console.log("Upload Roblox resposta:", JSON.stringify(response.data));
-
-    // O Roblox retorna uma operação assíncrona — precisamos esperar ela terminar
-    const operationId = response.data.path;
-    if (!operationId) throw new Error("Operation ID não retornado: " + JSON.stringify(response.data));
-
-    // Aguarda o processamento (tenta por até 30 segundos)
-    for (let i = 0; i < 15; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-
-        const statusResp = await axios({
-            method: "GET",
-            url: `https://apis.roblox.com/${operationId}`,
-            headers: { "x-api-key": process.env.ROBLOX_API_KEY }
-        });
-
-        console.log("Status do upload:", JSON.stringify(statusResp.data));
-
-        if (statusResp.data.done) {
-            const assetId = statusResp.data.response?.assetId;
-            if (!assetId) throw new Error("Asset ID não encontrado na resposta");
-            return `rbxassetid://${assetId}`;
-        }
-    }
-
-    throw new Error("Timeout aguardando processamento do áudio");
-}
 
 app.post("/deus", async (req, res) => {
     const { jogador, mensagem, contexto } = req.body;
