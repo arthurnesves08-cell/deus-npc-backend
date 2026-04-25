@@ -113,6 +113,12 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
 [AÇÃO:Delay|segundos=X]
   Use para criar pausas dramáticas entre ações.
 
+--- CONSTRUÇÃO ---
+[AÇÃO:Construir|tipo=X]
+  - tipo: descrição livre do que construir
+  - exemplos: "uma torre de obsidiana", "um altar sagrado", "um labirinto de pedra", "um castelo em ruínas"
+  - Use quando jogadores pedirem construções ou quando quiser marcar o mundo
+
 OBSERVAÇÕES ESPONTÂNEAS:
 Às vezes você receberá mensagens marcadas com [OBSERVAÇÃO ESPONTÂNEA].
 Nesses casos você está comentando algo que VIU acontecer, não respondendo a alguém.
