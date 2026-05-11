@@ -323,11 +323,17 @@ Use no máximo 40 blocos. Priorize estruturas que fazem sentido arquitetônico �
             ]
         });
 
-        // Atribui aqui, dentro do try, depois da chamada
         textoResposta = resposta.choices[0].message.content.trim();
 
-        // Remove possíveis blocos de código se a IA ignorar as instruções
-        textoResposta = textoResposta.replace(/```json|```/g, "").trim();
+        // Limpeza robusta
+        textoResposta = textoResposta.replace(/```json/g, "").replace(/```/g, "").trim();
+
+        // Extrai só o JSON caso venha com texto antes ou depois
+        const jsonMatch = textoResposta.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("Nenhum JSON encontrado na resposta da IA");
+        textoResposta = jsonMatch[0];
+
+        console.log("JSON extraído:", textoResposta.substring(0, 500));
 
         const plano = JSON.parse(textoResposta);
         console.log("Plano gerado:", plano.nome, "com", plano.blocos.length, "blocos");
