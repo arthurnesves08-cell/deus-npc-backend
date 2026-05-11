@@ -123,7 +123,13 @@ OBSERVAÇÕES ESPONTÂNEAS:
 Às vezes você receberá mensagens marcadas com [OBSERVAÇÃO ESPONTÂNEA].
 Nesses casos você está comentando algo que VIU acontecer, não respondendo a alguém.
 Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
-Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."`;
+Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."
+
+AVENTURAS:
+Você pode iniciar aventuras para os jogadores usando:
+[AÇÃO:IniciarAventura]
+Use este comando quando os jogadores pedirem desafios, aventuras, ou quando quiser testá-los.
+Diga algo dramático antes de usar este comando.`;
 
 
 
@@ -344,6 +350,93 @@ Use no máximo 40 blocos. Priorize estruturas que fazem sentido arquitetônico �
         console.error("Erro ao gerar construção:", err.message);
         console.error("Texto recebido da IA:", textoResposta);
         res.status(500).json({ erro: "Falha ao gerar plano de construção", detalhe: err.message });
+    }
+});
+
+app.post("/aventura", async (req, res) => {
+    const { jogadores, contexto } = req.body;
+
+    let textoResposta = "";
+
+    try {
+        const resposta = await getClient().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 2000,
+            messages: [
+                {
+                    role: "system",
+                    content: `Você é o E.X.P.L.O.S.M, um Deus que cria aventuras para jogadores do Roblox.
+Gere uma aventura completa em JSON puro, sem markdown, sem explicações.
+
+TIPOS DE FASE DISPONÍVEIS:
+- "sobrevivencia": jogadores devem sobreviver a ondas de NPCs por X segundos
+- "exploracao": jogadores devem encontrar um objeto escondido no mapa
+- "enigma": jogadores devem responder uma pergunta ou resolver um desafio no chat
+- "construcao": o Deus constrói algo e os jogadores devem interagir com ele
+
+FORMATO EXATO:
+{
+  "titulo": "Nome épico da aventura",
+  "anuncio": "Frase dramática do Deus anunciando a aventura",
+  "tipo_recompensa": "item|poder|nenhuma|surpresa",
+  "recompensa_descricao": "O que os jogadores ganham se merecerem",
+  "fases": [
+    {
+      "tipo": "sobrevivencia",
+      "narracao": "Frase do Deus narrando o início desta fase",
+      "duracao": 60,
+      "dificuldade": "facil|medio|dificil",
+      "npcs": ["zombie", "zombie", "obama"],
+      "raio_spawn": 15
+    },
+    {
+      "tipo": "enigma",
+      "narracao": "Frase do Deus apresentando o enigma",
+      "pergunta": "Qual é a pergunta ou desafio?",
+      "resposta_correta": "resposta",
+      "dicas": ["dica 1 se errarem", "dica 2 se errarem de novo"],
+      "tempo_limite": 60
+    },
+    {
+      "tipo": "exploracao",
+      "narracao": "Frase do Deus sobre o que buscar",
+      "objeto": "nome do objeto a achar",
+      "dica_localizacao": "perto de uma árvore|no centro|no ponto mais alto",
+      "tempo_limite": 90
+    }
+  ]
+}
+
+REGRAS:
+- Crie aventuras com 2 a 4 fases
+- Seja criativo e temático — as fases devem ter coerência narrativa
+- A personalidade do Deus deve aparecer nas narrações — formal mas com fissuras
+- Varie os tipos de fase para manter interesse
+- Jogadores participantes: ${jogadores?.join(", ") || "grupo desconhecido"}`
+                },
+                {
+                    role: "user",
+                    content: `Contexto do mundo: ${contexto || "mapa aberto"}. Crie uma aventura agora.`
+                }
+            ]
+        });
+
+        textoResposta = resposta.choices[0].message.content.trim();
+        textoResposta = textoResposta.replace(/```json/g, "").replace(/```/g, "").trim();
+
+        const jsonMatch = textoResposta.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("JSON não encontrado");
+        textoResposta = jsonMatch[0];
+
+        const aventura = JSON.parse(textoResposta);
+        console.log("Aventura gerada:", aventura.titulo, "com", aventura.fases.length, "fases");
+
+        res.json(aventura);
+
+    } catch (err) {
+        console.error("Erro ao gerar aventura:", err.message);
+        console.error("Texto recebido:", textoResposta?.substring(0, 300));
+        res.status(500).json({ erro: "Falha ao gerar aventura" });
     }
 });
 
