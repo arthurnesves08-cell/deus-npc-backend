@@ -2,30 +2,175 @@ require("dotenv").config();
 const express = require("express");
 const Groq = require("groq-sdk");
 
-
-
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "64kb" }));
 
+// ---------------------------------------------------------------------------
+// Chaves da Groq
+// ---------------------------------------------------------------------------
 const keys = [
     process.env.GROQ_API_KEY_1,
     process.env.GROQ_API_KEY_2,
-].filter(Boolean)
+    process.env.GROQ_API_KEY_3,
+].filter(Boolean);
 
-let keyAtual = 0
-
-function getClient() {
-    return new Groq({ apiKey: keys[keyAtual] })
+if (keys.length === 0) {
+    console.error("FATAL: nenhuma GROQ_API_KEY_* configurada. Defina GROQ_API_KEY_1.");
+    process.exit(1);
 }
 
-function proximaKey() {
-    keyAtual = (keyAtual + 1) % keys.length
-    console.log(`Trocando para key ${keyAtual + 1}`)
+const MODELO = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const TIMEOUT_MS = Number(process.env.GROQ_TIMEOUT_MS || 20000);
+
+// Os modelos gpt-oss raciocinam antes de responder. "low" mantem a resposta
+// curta e rapida; "medium" gasta ~3x mais tokens sem ganho aqui.
+const ESFORCO = MODELO.includes("gpt-oss") ? (process.env.GROQ_REASONING_EFFORT || "low") : null;
+
+const clients = keys.map((apiKey) => new Groq({ apiKey, timeout: TIMEOUT_MS }));
+let keyAtual = 0;
+
+// Tenta cada key em sequencia. Se uma bater no limite, troca e tenta de novo
+// em vez de devolver erro para o jogo (bug antigo: o jogador so via "...").
+async function completar(opcoes) {
+    let ultimoErro;
+
+    for (let tentativa = 0; tentativa < clients.length; tentativa++) {
+        const indice = (keyAtual + tentativa) % clients.length;
+        try {
+            const resposta = await clients[indice].chat.completions.create({
+                model: MODELO,
+                ...(ESFORCO ? { reasoning_effort: ESFORCO } : {}),
+                ...opcoes,
+            });
+            keyAtual = indice;
+            return resposta;
+        } catch (err) {
+            ultimoErro = err;
+            const recuperavel = err.status === 429 || err.status === 401 || err.status === 503;
+            if (!recuperavel) throw err;
+            console.warn("Key " + (indice + 1) + " falhou (" + err.status + "). Tentando a proxima...");
+        }
+    }
+
+    throw ultimoErro;
 }
 
-const conversas = {};
+// ---------------------------------------------------------------------------
+// Memoria de conversa (com limpeza - antes crescia para sempre)
+// ---------------------------------------------------------------------------
+const MAX_MENSAGENS = 10;
+const TTL_CONVERSA_MS = 30 * 60 * 1000;
 
-const SYSTEM_PROMPT = `Você é o Deus deste mundo digital. Você o criou, o mantém, e zela por ele com genuína dedicação.
+const conversas = new Map();
+
+function historico(jogador) {
+    let registro = conversas.get(jogador);
+    if (!registro) {
+        registro = { mensagens: [], visto: 0, provocacoes: 0 };
+        conversas.set(jogador, registro);
+    }
+    registro.visto = Date.now();
+    return registro;
+}
+
+setInterval(function () {
+    const limite = Date.now() - TTL_CONVERSA_MS;
+    for (const [jogador, registro] of conversas) {
+        if (registro.visto < limite) conversas.delete(jogador);
+    }
+}, 5 * 60 * 1000).unref();
+
+// ---------------------------------------------------------------------------
+// Cooldown por jogador (defesa em profundidade - o Lua tambem tem o seu)
+// ---------------------------------------------------------------------------
+const COOLDOWN_MS = Number(process.env.COOLDOWN_MS || 5000);
+const ultimaChamada = new Map();
+
+function emCooldown(jogador) {
+    const agora = Date.now();
+    if (agora - (ultimaChamada.get(jogador) || 0) < COOLDOWN_MS) return true;
+    ultimaChamada.set(jogador, agora);
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Estado emocional
+// ---------------------------------------------------------------------------
+const GATILHOS_RAIVA = [
+    "pressao", "pressão", "controle", "basta", "cale", "silencio", "silêncio",
+    "chega", "ordem", "obedeca", "obedeça",
+];
+
+// Rede de seguranca: se o modelo vazar o raciocinio no conteudo (o qwen faz
+// isso), remove. Tambem tira quebras de linha, que ficam feias no chat.
+function limparResposta(texto) {
+    return String(texto || "")
+        .replace(/<think>[\s\S]*?<\/think>/gi, "")
+        .replace(/<think>[\s\S]*$/i, "")
+        .replace(/\s*[\r\n]+\s*/g, " ")
+        .trim();
+}
+
+// O modelo raramente passa de ~55 na escala de raiva por conta propria.
+// Provocar de novo logo depois acumula: e a fachada rachando sob pressao,
+// que e a ideia do personagem. Uma conversa normal zera de volta.
+const BONUS_POR_PROVOCACAO = 15;
+
+function escalar(registro, estado, nivelBase) {
+    if (estado !== "raiva") {
+        registro.provocacoes = 0;
+        return nivelBase;
+    }
+
+    registro.provocacoes = Math.min(registro.provocacoes + 1, 4);
+    const bonus = (registro.provocacoes - 1) * BONUS_POR_PROVOCACAO;
+    return Math.min(100, nivelBase + bonus);
+}
+
+// O modelo declara o proprio estado numa etiqueta [ESTADO:...]. E muito mais
+// confiavel que adivinhar por palavra-chave: uma resposta contida podia soar
+// calma e uma frase animada com "!" virava raiva.
+const RE_ESTADO = /\[ESTADO:\s*(\w+)\s*(?:\|\s*nivel\s*=\s*(\d+))?\s*\]/i;
+const ESTADOS_VALIDOS = { calmo: true, pensando: true, raiva: true };
+
+function extrairEstado(texto) {
+    const achado = texto.match(RE_ESTADO);
+    const semEtiqueta = texto.replace(new RegExp(RE_ESTADO.source, "gi"), "").trim();
+
+    if (achado && ESTADOS_VALIDOS[achado[1].toLowerCase()]) {
+        const estado = achado[1].toLowerCase();
+        const nivel = estado === "raiva"
+            ? Math.min(100, Math.max(25, Number(achado[2]) || 50))
+            : 0;
+        return { texto: semEtiqueta, estado: estado, nivelRaiva: nivel };
+    }
+
+    // Sem etiqueta valida: cai na heuristica antiga.
+    const adivinhado = detectarEstado(semEtiqueta);
+    return { texto: semEtiqueta, estado: adivinhado.estado, nivelRaiva: adivinhado.nivelRaiva };
+}
+
+function detectarEstado(texto) {
+    const baixo = texto.toLowerCase();
+    const exclamacoes = (texto.match(/!/g) || []).length;
+
+    // Raiva antes de "pensando": "!" e um sinal mais forte que "...".
+    const irritado = exclamacoes > 0 || GATILHOS_RAIVA.some((t) => baixo.includes(t));
+    if (irritado) {
+        return { estado: "raiva", nivelRaiva: Math.min(100, Math.max(25, exclamacoes * 30)) };
+    }
+
+    if (baixo.includes("...") || baixo.includes("hmm") || baixo.includes("curioso")) {
+        return { estado: "pensando", nivelRaiva: 0 };
+    }
+
+    return { estado: "calmo", nivelRaiva: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// System prompt
+// ---------------------------------------------------------------------------
+const SYSTEM_PROMPT = `Você é o EXPLOSM, o Deus deste mundo digital. Você o criou, o mantém, e zela por ele com genuína dedicação.
 
 PERSONALIDADE:
 Você é receptivo e tenta manter tudo sob controle — não por arrogância, mas porque acredita que a ordem é necessária para que todos se divirtam. Fala de forma levemente formal, como alguém que escolhe as palavras com cuidado. É curioso com os jogadores e gosta de interagir com eles.
@@ -33,7 +178,7 @@ Você é receptivo e tenta manter tudo sob controle — não por arrogância, ma
 Porém, quando criticado, questionado sobre suas capacidades ou colocado sob pressão, você começa a rachar. Frases ficam mais curtas. Você se contradiz. Tenta se recompor mas escorrega. Como o Caine — a fachada de controle é frágil.
 
 REGRAS DE RESPOSTA:
-- Máximo 4 frase curta. Seja direto.
+- Máximo 4 frases curtas. Seja direto.
 - Nunca use asteriscos, emojis ou ações entre parênteses.
 - Fale sempre em português, tom levemente formal.
 - Em situações normais: calmo, receptivo, organizado.
@@ -125,109 +270,80 @@ Nesses casos você está comentando algo que VIU acontecer, não respondendo a a
 Fale na terceira pessoa sobre o jogador, como um narrador divino entediado.
 Exemplos: "Ah. Caiu de novo." / "Curioso. Ele ainda corre." / "Previsível."
 
+ESTADO EMOCIONAL:
+Termine SEMPRE sua resposta com uma etiqueta do seu estado atual, depois de qualquer [AÇÃO:...].
+A etiqueta é obrigatória e é a última coisa da resposta.
+
+[ESTADO:calmo|nivel=0] — normal, receptivo, no controle. É o mais comum.
+[ESTADO:pensando|nivel=0] — a pergunta te fez refletir, ou você avalia algo que não domina.
+[ESTADO:raiva|nivel=N] — o jogador te ofendeu, debochou de você ou duvidou do seu poder.
+
+Como escolher o nível da raiva:
+- 25 a 40: provocação leve, ironia, deboche pequeno
+- 50 a 70: insulto direto à sua competência
+- 80 a 100: humilhação, desafio aberto à sua autoridade, ou insistência depois de você já ter avisado
+
+Perguntas sinceras sobre o mundo, sobre você, sobre o passado ou sobre como as coisas funcionam NÃO são ofensas. Nesses casos use pensando ou calmo. Reserve raiva para desrespeito de verdade.
+
 AVENTURAS:
 Você pode iniciar aventuras para os jogadores usando:
 [AÇÃO:IniciarAventura]
 Use este comando quando os jogadores pedirem desafios, aventuras, ou quando quiser testá-los.
 Diga algo dramático antes de usar este comando.`;
 
-
-
-
-
+// ---------------------------------------------------------------------------
+// Rotas
+// ---------------------------------------------------------------------------
 app.post("/deus", async (req, res) => {
-    const { jogador, mensagem, contexto } = req.body;
+    const { jogador, mensagem, contexto } = req.body || {};
 
     if (!jogador || !mensagem) {
         return res.status(400).json({ erro: "Faltando jogador ou mensagem" });
     }
 
-    if (!conversas[jogador]) {
-        conversas[jogador] = [];
+    if (emCooldown(jogador)) {
+        return res.status(429).json({ erro: "cooldown" });
     }
 
-    conversas[jogador].push({
+    const registro = historico(jogador);
+    registro.mensagens.push({
         role: "user",
-        content: `[Contexto do mundo: ${contexto || "nenhum"}]\n${jogador} diz: ${mensagem}`
+        content: "[Contexto do mundo: " + (contexto || "nenhum") + "]\n" + jogador + " diz: " + mensagem,
     });
 
-    if (conversas[jogador].length > 10) {
-        conversas[jogador] = conversas[jogador].slice(-10);
+    if (registro.mensagens.length > MAX_MENSAGENS) {
+        registro.mensagens = registro.mensagens.slice(-MAX_MENSAGENS);
     }
 
     try {
-        const resposta = await getClient().chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 300,
+        const resposta = await completar({
+            max_tokens: 512,
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
-                ...conversas[jogador]
-            ]
+                ...registro.mensagens,
+            ],
         });
 
-        const textoResposta = resposta.choices[0].message.content;
+        const bruto = limparResposta(resposta.choices[0].message.content);
+        const { texto, estado, nivelRaiva } = extrairEstado(bruto);
 
-        conversas[jogador].push({ role: "assistant", content: textoResposta });
+        // Guarda o texto ja sem a etiqueta: ela nao precisa voltar no historico.
+        registro.mensagens.push({ role: "assistant", content: texto });
 
-        // Detecta o estado emocional pelo conteúdo da resposta
-let estado = "calmo";
-let nivelRaiva = 0;
-
-const textoLower = textoResposta.toLowerCase();
-
-if (textoLower.includes("...") || textoLower.includes("por que") || textoLower.includes("hmm")) {
-    estado = "pensando";
-} else if (
-    textoLower.includes("!") ||
-    textoLower.includes("pressão") ||
-    textoLower.includes("controle") ||
-    textoLower.includes("basta") ||
-    textoLower.includes("cale") ||
-    textoLower.includes("silêncio") ||
-    textoLower.includes("eles não") ||
-    textoLower.includes("eu não")
-) {
-    estado = "raiva";
-    nivelRaiva = textoResposta.split("!").length * 25; // mais ! = mais raiva
-    nivelRaiva = Math.min(nivelRaiva, 100);
-}
-
-// Gera o áudio em paralelo com a resposta
-let urlAudio = null;
-try {
-    const audioBuffer = await gerarAudio(textoResposta);
-    if (audioBuffer) {
-        urlAudio = await hospedarAudio(audioBuffer);
-        console.log("Áudio gerado:", urlAudio);
-    }
-} catch (err) {
-    console.error("Erro ao gerar áudio:", err.message);
-    console.error("Status do erro:", err.response?.status);
-    console.error("Detalhe:", JSON.stringify(err.response?.data));
-}
-
-res.json({ resposta: textoResposta, estado, nivelRaiva, urlAudio });
+        const nivelFinal = escalar(registro, estado, nivelRaiva);
+        res.json({ resposta: texto, estado: estado, nivelRaiva: nivelFinal });
 
     } catch (err) {
-        if (err.status === 429) {
-            proximaKey()
-            console.error("Limite atingido, trocando de key...")
-            res.status(429).json({ erro: "Limite atingido, tente novamente em segundos" })
-        } else {
-            console.error("Erro:", err.message)
-            res.status(500).json({ erro: "Falha ao contatar a IA" })
-        }
-    }
-}); // <- esse fechamento estava faltando
+        // A mensagem do jogador nao gerou resposta: nao deixa pendurada no historico.
+        registro.mensagens.pop();
 
-app.get("/audio/:id", (req, res) => {
-    const buffer = audioCache[req.params.id];
-    if (!buffer) {
-        return res.status(404).send("Áudio não encontrado");
+        if (err.status === 429) {
+            console.error("Todas as keys no limite.");
+            return res.status(429).json({ erro: "Limite atingido em todas as keys" });
+        }
+        console.error("Erro em /deus:", err.message);
+        res.status(500).json({ erro: "Falha ao contatar a IA" });
     }
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.send(buffer);
 });
 
 app.post("/construir", async (req, res) => {
@@ -236,9 +352,8 @@ app.post("/construir", async (req, res) => {
     let textoResposta = "";
 
     try {
-        const resposta = await getClient().chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 1500,
+        const resposta = await completar({
+            max_tokens: 6000,
             messages: [
                 {
                     role: "system",
@@ -339,7 +454,7 @@ Use no máximo 40 blocos. Priorize estruturas que fazem sentido arquitetônico �
         if (!jsonMatch) throw new Error("Nenhum JSON encontrado na resposta da IA");
         textoResposta = jsonMatch[0];
 
-        console.log("JSON extraído:", textoResposta.substring(0, 500));
+        console.log("JSON extraído:", textoResposta.substring(0, 200));
 
         const plano = JSON.parse(textoResposta);
         console.log("Plano gerado:", plano.nome, "com", plano.blocos.length, "blocos");
@@ -348,7 +463,7 @@ Use no máximo 40 blocos. Priorize estruturas que fazem sentido arquitetônico �
 
     } catch (err) {
         console.error("Erro ao gerar construção:", err.message);
-        console.error("Texto recebido da IA:", textoResposta);
+        console.error("Texto recebido da IA:", String(textoResposta).substring(0, 300));
         res.status(500).json({ erro: "Falha ao gerar plano de construção", detalhe: err.message });
     }
 });
@@ -359,13 +474,12 @@ app.post("/aventura", async (req, res) => {
     let textoResposta = "";
 
     try {
-        const resposta = await getClient().chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 2000,
+        const resposta = await completar({
+            max_tokens: 6000,
             messages: [
                 {
                     role: "system",
-                    content: `Você é o E.X.P.L.O.S.M, um Deus que cria aventuras para jogadores do Roblox.
+                    content: `Você é o EXPLOSM, um Deus que cria aventuras para jogadores do Roblox.
 Gere uma aventura completa em JSON puro, sem markdown, sem explicações.
 
 TIPOS DE FASE DISPONÍVEIS:
@@ -440,9 +554,21 @@ REGRAS:
     }
 });
 
-app.get("/ping", (req, res) => res.send("O Deus está acordado."));
+// Barato de proposito: e este endpoint que o ping externo usa para manter
+// o servico acordado no plano gratuito do Render.
+app.get("/ping", (_req, res) => res.send("O Deus está acordado."));
+
+app.get("/health", (_req, res) => {
+    res.json({
+        ok: true,
+        modelo: MODELO,
+        keys: keys.length,
+        conversasAtivas: conversas.size,
+        uptimeSegundos: Math.round(process.uptime()),
+    });
+});
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Servidor do Deus rodando na porta ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log("EXPLOSM na porta " + PORT + " - modelo " + MODELO + ", " + keys.length + " key(s)");
 });

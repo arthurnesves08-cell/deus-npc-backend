@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: explosm-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /ping
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Preencha os valores no painel do Render (sync: false = nao versionado)
+      - key: GROQ_API_KEY_1
+        sync: false
+      - key: GROQ_API_KEY_2
+        sync: false
