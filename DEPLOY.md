@@ -158,3 +158,41 @@ soma 15 por vez até 100:
 
 Qualquer mensagem que não gere raiva zera o acumulado. A constante é
 `BONUS_POR_PROVOCACAO` no `index.js`.
+
+---
+
+## Biblioteca de recursos dinâmica
+
+O prompt **não tem a lista de mapas, NPCs e itens escrita dentro dele.** Ele
+tem os marcadores `{{MAPAS}}`, `{{NPCS}}` e `{{ITENS}}`, preenchidos a cada
+chamada por `montarPrompt()`.
+
+Quem manda a lista é o jogo: o `DeusConfig` lê `ReplicatedStorage/Mapas`,
+`/NPCs` e `/Itens` e envia no campo `recursos` do POST `/deus`:
+
+```json
+{
+  "jogador": "Arthur",
+  "mensagem": "me leva pra uma arena de gelo",
+  "recursos": {
+    "mapas": ["arena_gelo", "arena_vulcao"],
+    "npcs": ["zombie", "obama"],
+    "itens": ["ak47"]
+  }
+}
+```
+
+Assim criar um mapa novo no Studio já ensina o EXPLOSM sobre ele — este
+arquivo nunca mais precisa ser editado por causa disso. Se `recursos` não
+vier, cai numa lista mínima de fallback.
+
+Custo: cerca de 150 tokens por chamada. Irrelevante perto do system prompt.
+
+### Ação nova
+
+```
+[AÇÃO:TrocarMapa|nome=arena_gelo]
+```
+
+Troca o mundo inteiro, com fade preto e teleporte dos jogadores. O lado
+Roblox está no script `DeusMapas`.

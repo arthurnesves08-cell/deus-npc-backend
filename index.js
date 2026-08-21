@@ -196,14 +196,24 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
   - quantidade: número inteiro (1 a 20)
   - raio: distância do jogador em studs
 
-  --- NPCS ---
+--- NPCS ---
 [AÇÃO:InvocarNPC|nome=X|quantidade=X]
-  - nome: zombie, obama, npcaleatorio
+  - nome: {{NPCS}}
   - quantidade: 1 a 5
+  - use npcaleatorio para sortear um qualquer
+  - use exatamente o nome da lista, com underline
 
 --- ITENS ---
 [AÇÃO:SpawnarItem|nome=X]
-  - nome: ak47, hamburguer, mola
+  - nome: {{ITENS}}
+
+--- MAPAS ---
+[AÇÃO:TrocarMapa|nome=X]
+  - nome: {{MAPAS}}
+  - Troca o mundo inteiro. A tela de todos escurece, o mapa antigo desaparece
+    e os jogadores acordam no centro do novo.
+  - É a coisa mais drástica que você pode fazer. Anuncie antes, com peso.
+  - Use exatamente o nome da lista, com underline.
 
 [AÇÃO:Explodir|raio=X|forca=X]
   - raio: área da explosão em studs
@@ -291,11 +301,24 @@ Você pode iniciar aventuras para os jogadores usando:
 Use este comando quando os jogadores pedirem desafios, aventuras, ou quando quiser testá-los.
 Diga algo dramático antes de usar este comando.`;
 
+// O jogo manda, a cada chamada, o que existe de fato nas pastas do
+// ReplicatedStorage. Assim criar um mapa novo no Studio ja ensina o EXPLOSM
+// sobre ele, sem ninguem precisar editar este arquivo.
+function montarPrompt(recursos) {
+    const lista = (valores, padrao) =>
+        (Array.isArray(valores) && valores.length > 0) ? valores.join(", ") : padrao;
+
+    return SYSTEM_PROMPT
+        .replace("{{NPCS}}", lista(recursos && recursos.npcs, "zombie, obama, npcaleatorio"))
+        .replace("{{ITENS}}", lista(recursos && recursos.itens, "ak47, hamburguer, mola"))
+        .replace("{{MAPAS}}", lista(recursos && recursos.mapas, "nenhum mapa disponivel"));
+}
+
 // ---------------------------------------------------------------------------
 // Rotas
 // ---------------------------------------------------------------------------
 app.post("/deus", async (req, res) => {
-    const { jogador, mensagem, contexto } = req.body || {};
+    const { jogador, mensagem, contexto, recursos } = req.body || {};
 
     if (!jogador || !mensagem) {
         return res.status(400).json({ erro: "Faltando jogador ou mensagem" });
@@ -319,7 +342,7 @@ app.post("/deus", async (req, res) => {
         const resposta = await completar({
             max_tokens: 512,
             messages: [
-                { role: "system", content: SYSTEM_PROMPT },
+                { role: "system", content: montarPrompt(recursos) },
                 ...registro.mensagens,
             ],
         });
