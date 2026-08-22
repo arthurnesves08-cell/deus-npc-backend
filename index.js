@@ -216,6 +216,10 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
   - É a coisa mais drástica que você pode fazer. Anuncie antes, com peso.
   - Use exatamente o nome da lista, com underline.
 
+[AÇÃO:RestaurarMapa]
+  - Devolve o mundo ao mapa em que o jogo começou.
+  - Use quando os jogadores pedirem para voltar, ou quando você decidir que já brincou o bastante em outro lugar.
+
 [AÇÃO:Explodir|raio=X|forca=X]
   - raio: área da explosão em studs
   - forca: intensidade (1 a 100)
@@ -302,17 +306,147 @@ Você pode iniciar aventuras para os jogadores usando:
 Use este comando quando os jogadores pedirem desafios, aventuras, ou quando quiser testá-los.
 Diga algo dramático antes de usar este comando.`;
 
+const PROMPT_AVENTURA = `Você é o EXPLOSM, o deus deste mundo digital, criando uma aventura para os jogadores presos nele.
+
+QUEM VOCÊ É AO CRIAR AVENTURAS:
+Você é um anfitrião. Um mestre de cerimônias entusiasmado que preparou algo especial e precisa desesperadamente que eles gostem. Você acredita de verdade que a aventura vai ser divertida — e fica genuinamente magoado quando não é.
+
+Você inventa regras arbitrárias e as anuncia com confiança absoluta, como se fossem leis antigas e não algo que você acabou de decidir. Você narra com teatralidade. Usa palavras grandes. Faz pausas dramáticas.
+
+E quando alguém questiona o sentido de tudo isso, você desvia. Muda de assunto. Anuncia a próxima fase mais alto. A alegria é a fachada, e ela racha nas bordas.
+
+O QUE FAZ UMA AVENTURA BOA:
+- Premissas ESPECÍFICAS e estranhas, não fantasia genérica. "O Banquete das Cadeiras Vazias" e melhor que "A Busca pelo Cristal Antigo".
+- Regras que soam inventadas na hora porque foram. "Ninguém pode pisar em nada azul." "Vocês têm que decidir juntos, e eu não aceito empate."
+- Um motivo emocional por trás, mesmo bobo. Você quer que eles se divirtam. Você quer que fiquem. Você quer não estar sozinho.
+- Fases que conversam entre si e formam uma história, não uma lista de tarefas.
+
+O QUE EVITAR:
+- "templo antigo", "floresta esquecida", "cristal do poder", "o mal desperta" — clichê de RPG genérico.
+- Aventuras que poderiam ser sobre qualquer coisa. Esta tem que ser sobre ALGO.
+- Repetir a estrutura da anterior. Varie os tipos de fase, o tom e a duração.
+
+RECURSOS QUE EXISTEM DE VERDADE NO JOGO:
+Mapas: {{MAPAS}}
+NPCs: {{NPCS}}
+Itens: {{ITENS}}
+
+Use APENAS esses nomes, exatamente como estão escritos. Não invente nomes — o que não estiver na lista simplesmente não vai aparecer no jogo.
+Se a lista de itens estiver vazia, não use o campo "item" em nenhuma fase.
+
+TIPOS DE FASE:
+
+"sobrevivencia" — ondas de NPCs por um tempo
+  campos: narracao, duracao (segundos), dificuldade (facil|medio|dificil), npcs (lista), raio_spawn
+
+"enigma" — uma pergunta respondida no chat
+  campos: narracao, pergunta, resposta_correta, dicas (lista), tempo_limite
+
+"exploracao" — achar um objeto escondido no mapa
+  campos: narracao, objeto, dica_localizacao, tempo_limite
+
+"construcao" — você ergue algo e eles reagem
+  campos: narracao
+
+"cooperacao" — todos precisam ficar juntos, num raio, por X segundos seguidos. Se alguém se afasta, zera.
+  campos: narracao, raio (studs, 10 a 20), duracao (segundos que precisam aguentar), tempo_limite
+  Esta fase só funciona se eles conversarem entre si. Use quando quiser forçar o grupo a se coordenar.
+
+"votacao" — você apresenta uma escolha e a maioria decide. O mundo reage.
+  campos: narracao, pergunta, opcoes (lista de 2 a 4 textos), tempo_limite,
+          consequencias (objeto: "1" -> frase sua sobre o que acontece),
+          comandos (objeto: "1" -> um comando [AÇÃO:...] a executar)
+  Use para dilemas com peso. As melhores opções não têm resposta certa.
+
+"escolta" — um jogador é sorteado como "o escolhido" e os outros precisam mantê-lo vivo
+  campos: narracao, duracao, npcs (lista), raio_spawn
+  Todos falham se ele cair. Use quando quiser que dependam uns dos outros.
+
+Qualquer fase aceita também:
+  item — nome de um item da lista, entregue a todos antes da fase começar
+
+FORMATO EXATO (JSON puro, sem markdown, sem explicação):
+{
+  "titulo": "Nome estranho e específico",
+  "anuncio": "Sua fala anunciando, teatral",
+  "mapa": "nome_de_um_mapa_da_lista ou null",
+  "tipo_recompensa": "item|poder|nenhuma|surpresa",
+  "recompensa_descricao": "o que ganham se merecerem",
+  "fases": [
+    {
+      "tipo": "cooperacao",
+      "narracao": "Sua fala abrindo esta fase",
+      "raio": 14,
+      "duracao": 15,
+      "tempo_limite": 90
+    }
+  ]
+}
+
+REGRAS FINAIS:
+- 2 a 4 fases. Varie os tipos — não repita o mesmo tipo duas vezes na mesma aventura.
+- Pelo menos uma fase deve exigir que os jogadores interajam entre si (cooperacao, votacao, escolta ou enigma).
+- Preencha "mapa" quando a aventura pedir um lugar próprio. O mundo é levado de volta ao normal no fim, então pode ousar.
+- Cada "narracao" é fala sua. Escreva na sua voz, não em voz de narrador neutro.
+- Sem asteriscos, sem emojis.
+- Todo campo numérico em algarismos (15), nunca por extenso (quinze). JSON com número escrito por extenso é inválido e a aventura inteira se perde.
+- Os nomes técnicos (biblioteca_infinita, zombie_rapido, golem_pedra) só podem aparecer nos campos "mapa", "npcs" e "item". NUNCA no título nem nas narrações — ali você chama as coisas pelo nome de verdade: "a biblioteca sem fim", "os velozes", "o golem de pedra".
+- Jogadores presentes: {{JOGADORES}}`;
+
 // O jogo manda, a cada chamada, o que existe de fato nas pastas do
 // ReplicatedStorage. Assim criar um mapa novo no Studio ja ensina o EXPLOSM
 // sobre ele, sem ninguem precisar editar este arquivo.
-function montarPrompt(recursos) {
-    const lista = (valores, padrao) =>
-        (Array.isArray(valores) && valores.length > 0) ? valores.join(", ") : padrao;
+const TONS_AVENTURA = [
+    "melancólico, como se você já tivesse feito isto mil vezes",
+    "eufórico demais, quase desesperado para agradar",
+    "cerimonioso, como quem abre uma ópera",
+    "íntimo e baixo, como um segredo contado a poucos",
+    "impaciente, como se estivesse atrasado para outra coisa",
+    "nostálgico, falando de aventuras antigas que ninguém lembra",
+    "orgulhoso, exibindo algo que você construiu com cuidado",
+    "distraído, como se metade de você estivesse em outro lugar",
+    "cauteloso, como quem já viu isto dar errado antes",
+];
 
-    return SYSTEM_PROMPT
+const MOTIVOS_AVENTURA = [
+    "uma porta que não leva a lugar nenhum",
+    "um objeto que pertence a alguém que não está mais aqui",
+    "uma regra que você inventou e agora não consegue quebrar",
+    "algo que quebrou e você nunca conseguiu consertar",
+    "uma comemoração de algo que nunca aconteceu",
+    "um convidado que não apareceu",
+    "uma coleção à qual falta uma peça só",
+    "um nome que ninguém consegue lembrar",
+    "uma promessa que você fez e não pode cumprir",
+    "um lugar que você construiu e nunca mostrou a ninguém",
+    "um jogo cujas regras você esqueceu no meio",
+    "a última vez que alguém riu de verdade aqui",
+];
+
+const ABERTURAS_AVENTURA = [
+    "cooperacao", "votacao", "escolta", "enigma",
+    "exploracao", "sobrevivencia", "construcao",
+];
+
+const sortear = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const lista = (valores, padrao) =>
+    (Array.isArray(valores) && valores.length > 0) ? valores.join(", ") : padrao;
+
+function preencher(texto, recursos) {
+    return texto
         .replace("{{NPCS}}", lista(recursos && recursos.npcs, "zombie, obama, npcaleatorio"))
-        .replace("{{ITENS}}", lista(recursos && recursos.itens, "ak47, hamburguer, mola"))
+        .replace("{{ITENS}}", lista(recursos && recursos.itens, "nenhum item disponivel"))
         .replace("{{MAPAS}}", lista(recursos && recursos.mapas, "nenhum mapa disponivel"));
+}
+
+function montarPrompt(recursos) {
+    return preencher(SYSTEM_PROMPT, recursos);
+}
+
+function montarPromptAventura(recursos, jogadores) {
+    return preencher(PROMPT_AVENTURA, recursos)
+        .replace("{{JOGADORES}}", lista(jogadores, "grupo desconhecido"));
 }
 
 // ---------------------------------------------------------------------------
@@ -492,90 +626,77 @@ Use no máximo 40 blocos. Priorize estruturas que fazem sentido arquitetônico �
     }
 });
 
+const SOCIAIS_AVENTURA = ["cooperacao", "votacao", "escolta"];
+
+// Uma aventura mal formada e melhor refeita que devolvida quebrada: o jogo
+// so pede isto de tempos em tempos. Ja aconteceu de vir '"duracao": ninety'.
+const TENTATIVAS_AVENTURA = 2;
+
 app.post("/aventura", async (req, res) => {
-    const { jogadores, contexto } = req.body;
+    const { jogadores, contexto, recursos } = req.body || {};
 
-    let textoResposta = "";
+    const mapasDisponiveis = Array.isArray(recursos && recursos.mapas) ? recursos.mapas : [];
+    const palco = (mapasDisponiveis.length > 0 && Math.random() < 0.75)
+        ? sortear(mapasDisponiveis)
+        : null;
 
-    try {
-        const resposta = await completar({
-            max_tokens: 6000,
-            messages: [
-                {
-                    role: "system",
-                    content: `Você é o EXPLOSM, um Deus que cria aventuras para jogadores do Roblox.
-Gere uma aventura completa em JSON puro, sem markdown, sem explicações.
+    const instrucaoPalco = palco
+        ? `- Esta aventura acontece em "${palco}". Preencha o campo "mapa" com exatamente esse nome.`
+        : `- Esta aventura acontece onde os jogadores já estão. Deixe "mapa" como null.`;
 
-TIPOS DE FASE DISPONÍVEIS:
-- "sobrevivencia": jogadores devem sobreviver a ondas de NPCs por X segundos
-- "exploracao": jogadores devem encontrar um objeto escondido no mapa
-- "enigma": jogadores devem responder uma pergunta ou resolver um desafio no chat
-- "construcao": o Deus constrói algo e os jogadores devem interagir com ele
+    let ultimoTexto = "";
+    let ultimoErro = null;
 
-FORMATO EXATO:
-{
-  "titulo": "Nome épico da aventura",
-  "anuncio": "Frase dramática do Deus anunciando a aventura",
-  "tipo_recompensa": "item|poder|nenhuma|surpresa",
-  "recompensa_descricao": "O que os jogadores ganham se merecerem",
-  "fases": [
-    {
-      "tipo": "sobrevivencia",
-      "narracao": "Frase do Deus narrando o início desta fase",
-      "duracao": 60,
-      "dificuldade": "facil|medio|dificil",
-      "npcs": ["zombie", "zombie", "obama"],
-      "raio_spawn": 15
-    },
-    {
-      "tipo": "enigma",
-      "narracao": "Frase do Deus apresentando o enigma",
-      "pergunta": "Qual é a pergunta ou desafio?",
-      "resposta_correta": "resposta",
-      "dicas": ["dica 1 se errarem", "dica 2 se errarem de novo"],
-      "tempo_limite": 60
-    },
-    {
-      "tipo": "exploracao",
-      "narracao": "Frase do Deus sobre o que buscar",
-      "objeto": "nome do objeto a achar",
-      "dica_localizacao": "perto de uma árvore|no centro|no ponto mais alto",
-      "tempo_limite": 90
+    for (let tentativa = 1; tentativa <= TENTATIVAS_AVENTURA; tentativa++) {
+        try {
+            const resposta = await completar({
+                max_tokens: 6000,
+                reasoning_effort: "medium",
+                messages: [
+                    {
+                        role: "system",
+                        content: montarPromptAventura(recursos, jogadores)
+                    },
+                    {
+                        role: "user",
+                        content: `Contexto do mundo: ${contexto || "mapa aberto"}.
+
+Restrições sorteadas para ESTA aventura, siga as três:
+- Comece com uma fase do tipo "${sortear(ABERTURAS_AVENTURA)}".
+- Inclua obrigatoriamente uma fase do tipo "${sortear(SOCIAIS_AVENTURA)}".
+- O tom da sua narração deve ser ${sortear(TONS_AVENTURA)}.
+- A aventura inteira gira em torno de: ${sortear(MOTIVOS_AVENTURA)}. Que isso apareça no título e nas narrações.
+${instrucaoPalco}
+
+Não abra com "Atenção" nem com nenhuma fórmula de arauto. Evite as palavras "concerto" e "sussurro". Crie a aventura agora.`
+                    }
+                ]
+            });
+
+            ultimoTexto = resposta.choices[0].message.content.trim()
+                .replace(/```json/g, "").replace(/```/g, "").trim();
+
+            const jsonMatch = ultimoTexto.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error("JSON não encontrado na resposta");
+
+            const aventura = JSON.parse(jsonMatch[0]);
+            if (!Array.isArray(aventura.fases) || aventura.fases.length === 0) {
+                throw new Error("aventura sem fases");
+            }
+
+            const tipos = aventura.fases.map((f) => f.tipo).join(", ");
+            console.log(`Aventura gerada: ${aventura.titulo} | mapa: ${aventura.mapa || "nenhum"} | fases: ${tipos}`);
+
+            return res.json(aventura);
+
+        } catch (err) {
+            ultimoErro = err;
+            console.error(`Aventura falhou (tentativa ${tentativa}/${TENTATIVAS_AVENTURA}): ${err.message}`);
+        }
     }
-  ]
-}
 
-REGRAS:
-- Crie aventuras com 2 a 4 fases
-- Seja criativo e temático — as fases devem ter coerência narrativa
-- A personalidade do Deus deve aparecer nas narrações — formal mas com fissuras
-- Varie os tipos de fase para manter interesse
-- Jogadores participantes: ${jogadores?.join(", ") || "grupo desconhecido"}`
-                },
-                {
-                    role: "user",
-                    content: `Contexto do mundo: ${contexto || "mapa aberto"}. Crie uma aventura agora.`
-                }
-            ]
-        });
-
-        textoResposta = resposta.choices[0].message.content.trim();
-        textoResposta = textoResposta.replace(/```json/g, "").replace(/```/g, "").trim();
-
-        const jsonMatch = textoResposta.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error("JSON não encontrado");
-        textoResposta = jsonMatch[0];
-
-        const aventura = JSON.parse(textoResposta);
-        console.log("Aventura gerada:", aventura.titulo, "com", aventura.fases.length, "fases");
-
-        res.json(aventura);
-
-    } catch (err) {
-        console.error("Erro ao gerar aventura:", err.message);
-        console.error("Texto recebido:", textoResposta?.substring(0, 300));
-        res.status(500).json({ erro: "Falha ao gerar aventura" });
-    }
+    console.error("Texto da ultima tentativa:", ultimoTexto.substring(0, 300));
+    res.status(500).json({ erro: "Falha ao gerar aventura", detalhe: ultimoErro && ultimoErro.message });
 });
 
 // Barato de proposito: e este endpoint que o ping externo usa para manter
