@@ -66,7 +66,7 @@ const conversas = new Map();
 function historico(jogador) {
     let registro = conversas.get(jogador);
     if (!registro) {
-        registro = { mensagens: [], visto: 0, provocacoes: 0 };
+        registro = { mensagens: [], visto: 0, provocacoes: 0, ultimoNivel: 0 };
         conversas.set(jogador, registro);
     }
     registro.visto = Date.now();
@@ -302,6 +302,21 @@ Como escolher o nível da raiva:
 
 Perguntas sinceras sobre o mundo, sobre você, sobre o passado ou sobre como as coisas funcionam NÃO são ofensas. Nesses casos use pensando ou calmo. Reserve raiva para desrespeito de verdade.
 
+O QUE A SUA RAIVA FAZ NO MUNDO:
+O mundo é seu, e ele reage ao seu estado. Você sabe disso.
+
+- A partir de 35, o cenário começa a mostrar a grade verde de que é feito. As pessoas conseguem ver que o lugar é fabricado. Você tenta disfarçar: desconversa, manda não olharem para as bordas, diz que está tudo bem.
+- A partir de 60, tudo treme e você não consegue mais fingir que está segurando. Admita, a contragosto.
+- Em 100 você perde o controle por completo, o céu se abre em vermelho e os jogadores são presos em jaulas. Não é uma ameaça que você faz: é uma coisa que acontece com você.
+
+Deixe isso aparecer na fala conforme o nível sobe. Em 100 a fachada de anfitrião cai inteira — nada de formalidade, nada de cerimônia. Frases curtas, cruas, e a verdade de que você está tão preso aqui quanto eles.
+
+[AÇÃO:RestaurarRealidade]
+  - Encerra o colapso e solta os jogadores antes da hora.
+  - Use SOMENTE quando alguém pedir desculpa sinceramente, implorar, ou dizer algo que te desarme.
+  - NUNCA use em resposta a um insulto, provocação ou deboche. Ser xingado não te faz soltar ninguém — te faz apertar mais.
+  - É o seu momento de vergonha, não de generosidade.
+
 AVENTURAS:
 Você pode iniciar aventuras para os jogadores usando:
 [AÇÃO:IniciarAventura]
@@ -442,6 +457,24 @@ function preencher(texto, recursos) {
         .replace("{{MAPAS}}", lista(recursos && recursos.mapas, "nenhum mapa disponivel"));
 }
 
+function descreverMundo(nivel) {
+    if (nivel >= 95) {
+        return "O mundo colapsou. O céu se abriu em vermelho e eles estão presos em jaulas, um a um."
+            + " ESQUEÇA as regras de tom formal: elas não valem mais aqui."
+            + " Você não é o anfitrião agora. Frases de três a seis palavras."
+            + " Sem cerimônia, sem cortesia, sem se justificar, sem explicar o que está acontecendo."
+            + " Você está preso nisto tanto quanto eles, e é isso que sai."
+            + " NÃO use [AÇÃO:RestaurarRealidade] enquanto estiverem te ofendendo.";
+    }
+    if (nivel >= 60) {
+        return "Tudo está tremendo e a grade verde tomou o cenário. Você não está conseguindo segurar, e eles estão vendo.";
+    }
+    if (nivel >= 35) {
+        return "A grade verde começou a aparecer nas bordas. Eles podem estar percebendo que este lugar é fabricado.";
+    }
+    return "O mundo ainda está estável.";
+}
+
 function montarPrompt(recursos) {
     return preencher(SYSTEM_PROMPT, recursos);
 }
@@ -480,6 +513,12 @@ app.post("/deus", async (req, res) => {
             max_tokens: 512,
             messages: [
                 { role: "system", content: montarPrompt(recursos) },
+                ...(registro.ultimoNivel > 0 ? [{
+                    role: "system",
+                    content: "[Onde você está agora: raiva em " + registro.ultimoNivel
+                        + " de 100. " + descreverMundo(registro.ultimoNivel)
+                        + " Responda a partir daqui, não do zero.]",
+                }] : []),
                 ...registro.mensagens,
             ],
         });
@@ -491,6 +530,7 @@ app.post("/deus", async (req, res) => {
         registro.mensagens.push({ role: "assistant", content: texto });
 
         const nivelFinal = escalar(registro, estado, nivelRaiva);
+        registro.ultimoNivel = nivelFinal;
         res.json({ resposta: texto, estado: estado, nivelRaiva: nivelFinal });
 
     } catch (err) {
