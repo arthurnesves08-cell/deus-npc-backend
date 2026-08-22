@@ -205,8 +205,10 @@ Você pode usar quantos quiser, em qualquer ordem. Use apenas quando fizer senti
   - use exatamente o nome da lista, com underline
 
 --- ITENS ---
-[AÇÃO:SpawnarItem|nome=X]
+[AÇÃO:SpawnarItem|nome=X|alvo=X]
   - nome: {{ITENS}}
+  - alvo: nome de um jogador ou "todos". Se omitir, vai para quem falou com você.
+  - O item vai DIRETO para a mochila do jogador, não cai no chão. Fale como quem entrega algo na mão, não como quem joga no chão.
 
 --- MAPAS ---
 [AÇÃO:TrocarMapa|nome=X]
