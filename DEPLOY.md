@@ -196,3 +196,37 @@ Custo: cerca de 150 tokens por chamada. Irrelevante perto do system prompt.
 
 Troca o mundo inteiro, com fade preto e teleporte dos jogadores. O lado
 Roblox está no script `DeusMapas`.
+
+---
+
+## Rota /copias
+
+Gera falas para as cópias dos jogadores da dimensão espelho da Portal Gun.
+
+```
+POST /copias
+{ "jogador": "Arthur", "personalidade": "perturbado", "quantidade": 7 }
+→ { "falas": ["...", "..."] }
+```
+
+`personalidade` aceita `amigavel`, `desconfiado`, `indiferente` e
+`perturbado`. Cada uma tem uma voz própria descrita no `PROMPT_COPIAS`.
+
+O jogo chama isto **uma vez por cópia**, ao criá-la, e usa o lote inteiro
+depois — não uma chamada por fala. Enquanto a resposta não chega, e se ela
+falhar, o lado Roblox usa uma lista fixa de reserva. A cópia nunca fica muda.
+
+O prompt proíbe explicitamente clichê de terror ("corra", "fuja", "eles vêm
+aí") e vocabulário de bairro (café, casa, vizinho, loja) — nas primeiras
+tentativas o "amigável" virou anfitrião de pousada oferecendo café quentinho,
+o que não existe numa cópia digital de um mundo de jogo.
+
+Amostra do que sai agora:
+
+```
+amigavel     "Fica mais um pouco, por favor."
+             "Fica mais um pouco, eu estou aqui."
+             "Podemos conversar até o fim?"
+indiferente  "Nada mudou, segue o script."
+perturbado   "Vi seu nome gravado na primeira tela."
+```

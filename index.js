@@ -741,6 +741,68 @@ Não abra com "Atenção" nem com nenhuma fórmula de arauto. Evite as palavras 
     res.status(500).json({ erro: "Falha ao gerar aventura", detalhe: ultimoErro && ultimoErro.message });
 });
 
+const PROMPT_COPIAS = `Você escreve falas para a versão de um jogador que vive numa dimensão paralela — quase idêntica à de origem, mas não a mesma.
+
+Essa pessoa está aqui há tempo demais. Ela sabe que este lugar é uma cópia. Ela reconhece um visitante quando vê um, porque ela mesma já foi um.
+
+REGRAS:
+- Cada fala tem no máximo 9 palavras. São falas de chat, não monólogos.
+- Nada de asteriscos, emoji ou ação entre parênteses.
+- Português do Brasil, tom natural de quem digita no chat.
+- Nunca explique a situação. Quem está lá dentro não explica, só vive.
+- PROIBIDO: "corra", "fuja", "eles vêm aí", "socorro", "cuidado", "perigo". Nada de clichê de terror.
+- PROIBIDO também: café, chá, casa, vizinho, rua, loja. Aqui não é um bairro — é uma cópia de um mundo de jogo, vazio, com gente que não devia estar nele.
+- O desconforto vem do que é dito de leve, não do que é gritado. Uma frase gentil no lugar errado assusta mais que um aviso.
+
+PERSONALIDADES:
+- amigavel: carente ao ponto de dar desconforto. Não é hospitaleiro, é solitário demais. Quer que você fique e não disfarça bem. "Fica mais um pouco" dito três vezes seguidas.
+- desconfiado: quer distância. Não avisa de perigo nenhum — só não quer você perto. Desconfia porque já foi ingênuo antes.
+- indiferente: cansado. Responde curto e volta ao que estava fazendo. Não se impressiona com nada porque já viu tudo.
+- perturbado: fala com calma de coisas que não teria como saber sobre você. Nunca ameaça. Só sabe.
+
+Responda APENAS com JSON puro, sem markdown:
+{ "falas": ["...", "...", "..."] }`;
+
+app.post("/copias", async (req, res) => {
+    const { jogador, personalidade, quantidade } = req.body || {};
+    const quantas = Math.min(Math.max(Number(quantidade) || 6, 3), 10);
+
+    let texto = "";
+
+    try {
+        const resposta = await completar({
+            max_tokens: 900,
+            messages: [
+                { role: "system", content: PROMPT_COPIAS },
+                {
+                    role: "user",
+                    content: `Escreva ${quantas} falas para a cópia de ${jogador || "alguém"}, personalidade "${personalidade || "indiferente"}". Ela acabou de ver um visitante chegar.`,
+                },
+            ],
+        });
+
+        texto = limparResposta(resposta.choices[0].message.content)
+            .replace(/```json/g, "").replace(/```/g, "").trim();
+
+        const achado = texto.match(/\{[\s\S]*\}/);
+        if (!achado) throw new Error("JSON nao encontrado");
+
+        const dados = JSON.parse(achado[0]);
+        if (!Array.isArray(dados.falas) || dados.falas.length === 0) {
+            throw new Error("sem falas");
+        }
+
+        console.log(`Falas geradas para ${jogador} (${personalidade}): ${dados.falas.length}`);
+        res.json({ falas: dados.falas.map(String) });
+
+    } catch (err) {
+        console.error("Erro ao gerar falas de copia:", err.message);
+        console.error("Texto recebido:", texto.substring(0, 200));
+        // O jogo tem uma lista de reserva; devolver erro aqui nao quebra nada.
+        res.status(500).json({ erro: "Falha ao gerar falas" });
+    }
+});
+
 // Barato de proposito: e este endpoint que o ping externo usa para manter
 // o servico acordado no plano gratuito do Render.
 app.get("/ping", (_req, res) => res.send("O Deus está acordado."));
