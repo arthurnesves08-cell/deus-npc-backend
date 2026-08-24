@@ -209,34 +209,27 @@ POST /copias
 → { "falas": ["...", "..."] }
 ```
 
-`personalidade` aceita `amigavel`, `desconfiado`, `indiferente` e
-`perturbado`. Cada uma tem uma voz própria descrita no `PROMPT_COPIAS`.
+`personalidade` aceita `chocado`, `tranquilo`, `curioso`, `debochado` e
+`ocupado`. São reações de **jogador**, não de fantasma: alguém que se vê e
+surta, alguém que já sabe da arma e não liga, alguém que só quer saber quantos
+robux você tem.
 
-Com o campo `mensagem`, a rota muda de função: devolve **uma resposta** ao que
-o jogador disse, e a cópia lembra da conversa (histórico próprio, separado do
-do EXPLOSM, na chave `copia:<jogador>:<personalidade>`).
+O prompt proíbe explicitamente metáfora, poesia e frase de efeito. A primeira
+versão saía como legenda de filme de terror — "seus passos ainda deixam eco
+antigo" — que é bonito e completamente errado para o chat de um jogo. A régua
+agora é: se parece alguém digitando rápido no celular, está certo.
 
-```
-POST /copias
-{ "jogador": "Arthur", "personalidade": "amigavel", "mensagem": "voce ta sozinho aqui?" }
-→ { "falas": ["Não, mas sua presença deixa tudo melhor"] }
-```
-
-Sem `mensagem`, o jogo chama isto **uma vez por cópia**, ao criá-la, e usa o
-lote inteiro depois — não uma chamada por fala. Enquanto a resposta não chega, e se ela
-falhar, o lado Roblox usa uma lista fixa de reserva. A cópia nunca fica muda.
-
-O prompt proíbe explicitamente clichê de terror ("corra", "fuja", "eles vêm
-aí") e vocabulário de bairro (café, casa, vizinho, loja) — nas primeiras
-tentativas o "amigável" virou anfitrião de pousada oferecendo café quentinho,
-o que não existe numa cópia digital de um mundo de jogo.
+Também proíbe palavrão, porque o lado Roblox passa tudo por
+`TextService:FilterStringAsync` antes de exibir — o balão é desenhado à mão e
+não passaria pelo filtro de chat sozinho. Fala reprovada é descartada, então
+palavrão vira cópia muda.
 
 Amostra do que sai agora:
 
 ```
-amigavel     "Fica mais um pouco, por favor."
-             "Fica mais um pouco, eu estou aqui."
-             "Podemos conversar até o fim?"
-indiferente  "Nada mudou, segue o script."
-perturbado   "Vi seu nome gravado na primeira tela."
+chocado     "pera que isso mano" / "nn consigo processar"
+tranquilo   "a arma né eu tinha uma" / "tô de boa"
+curioso     "vc tem quantos robux?" / "qual a taxa de drop?"
+debochado   "kkkkkk que roupa é isso" / "vc acha que eu sou lag"
+ocupado     "to correndo, fala rapido" / "não dá, tenho missão"
 ```

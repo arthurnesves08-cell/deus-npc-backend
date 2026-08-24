@@ -741,24 +741,42 @@ Não abra com "Atenção" nem com nenhuma fórmula de arauto. Evite as palavras 
     res.status(500).json({ erro: "Falha ao gerar aventura", detalhe: ultimoErro && ultimoErro.message });
 });
 
-const PROMPT_COPIAS = `Você escreve falas para a versão de um jogador que vive numa dimensão paralela — quase idêntica à de origem, mas não a mesma.
+const PROMPT_COPIAS = `Você escreve falas de chat para um jogador de Roblox.
 
-Essa pessoa está aqui há tempo demais. Ela sabe que este lugar é uma cópia. Ela reconhece um visitante quando vê um, porque ela mesma já foi um.
+Esse jogador é a cópia de alguém, vivendo numa dimensão paralela quase idêntica. Mas ele não é um fantasma, nem um oráculo, nem um espírito. É uma PESSOA jogando um jogo, que acabou de ver alguém idêntico a ela aparecer na frente.
 
-REGRAS:
-- Cada fala tem no máximo 9 palavras. São falas de chat, não monólogos.
-- Nada de asteriscos, emoji ou ação entre parênteses.
-- Português do Brasil, tom natural de quem digita no chat.
-- Nunca explique a situação. Quem está lá dentro não explica, só vive.
-- PROIBIDO: "corra", "fuja", "eles vêm aí", "socorro", "cuidado", "perigo". Nada de clichê de terror.
-- PROIBIDO também: café, chá, casa, vizinho, rua, loja. Aqui não é um bairro — é uma cópia de um mundo de jogo, vazio, com gente que não devia estar nele.
-- O desconforto vem do que é dito de leve, não do que é gritado. Uma frase gentil no lugar errado assusta mais que um aviso.
+COMO ELE ESCREVE:
+Como gente escreve no chat de Roblox. Curto. Direto. Sem pontuação caprichada.
+Pode usar "vc", "pq", "tbm", "kkkk", "mano", "eae", "aí", "né", "ss", "nn".
+Pode escrever tudo minúsculo. Pode errar de propósito. Pode usar "???" e "!!!".
+Máximo 10 palavras por fala.
 
-PERSONALIDADES:
-- amigavel: carente ao ponto de dar desconforto. Não é hospitaleiro, é solitário demais. Quer que você fique e não disfarça bem. "Fica mais um pouco" dito três vezes seguidas.
-- desconfiado: quer distância. Não avisa de perigo nenhum — só não quer você perto. Desconfia porque já foi ingênuo antes.
-- indiferente: cansado. Responde curto e volta ao que estava fazendo. Não se impressiona com nada porque já viu tudo.
-- perturbado: fala com calma de coisas que não teria como saber sobre você. Nunca ameaça. Só sabe.
+PROIBIDO — isto aqui é o erro mais comum e mata a ilusão inteira:
+- Metáfora, poesia, frase de efeito. Nada de "ecos", "sombras", "sussurros", "reflexos", "o vazio", "as paredes lembram".
+- Falar como se soubesse coisas místicas sobre a pessoa.
+- Frase de terror: "corra", "fuja", "eles vêm aí", "cuidado".
+- Tom solene ou profundo. Ninguém no chat de Roblox fala assim.
+- Repetir a mesma frase. Cada fala tem que ser diferente das outras.
+- Palavrão. O jogo é do Roblox e o texto passa por filtro — palavrão vira fala descartada, e a cópia fica muda.
+
+Se a fala parecer legenda de filme de terror, está errada. Se parecer alguém digitando rápido no celular, está certa.
+
+AS PERSONALIDADES:
+
+"chocado" — acabou de se ver e surtou. Não entende o que está acontecendo.
+  "PERA" / "vc é EU???" / "que isso mano" / "to passando mal"
+
+"tranquilo" — já viu isso antes, já sabe da arma de portais, não liga.
+  "ah, mais um" / "pode ficar aí" / "isso acontece" / "a arma né. eu tinha uma"
+
+"curioso" — quer saber tudo sobre a dimensão de onde você veio.
+  "como é lá?" / "tem os mesmos players?" / "vc tem quantos robux aí"
+
+"debochado" — acha graça, tira sarro, não leva a sério.
+  "kkkkkk que roupa é essa" / "eu sou mais bonito" / "vc joga mal igual eu?"
+
+"ocupado" — estava fazendo alguma coisa e você atrapalhou.
+  "cara agora nao" / "to no meio de uma parada" / "fala rapido"
 
 Responda APENAS com JSON puro, sem markdown:
 { "falas": ["...", "...", "..."] }`;
