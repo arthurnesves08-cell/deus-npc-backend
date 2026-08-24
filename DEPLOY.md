@@ -212,8 +212,18 @@ POST /copias
 `personalidade` aceita `amigavel`, `desconfiado`, `indiferente` e
 `perturbado`. Cada uma tem uma voz própria descrita no `PROMPT_COPIAS`.
 
-O jogo chama isto **uma vez por cópia**, ao criá-la, e usa o lote inteiro
-depois — não uma chamada por fala. Enquanto a resposta não chega, e se ela
+Com o campo `mensagem`, a rota muda de função: devolve **uma resposta** ao que
+o jogador disse, e a cópia lembra da conversa (histórico próprio, separado do
+do EXPLOSM, na chave `copia:<jogador>:<personalidade>`).
+
+```
+POST /copias
+{ "jogador": "Arthur", "personalidade": "amigavel", "mensagem": "voce ta sozinho aqui?" }
+→ { "falas": ["Não, mas sua presença deixa tudo melhor"] }
+```
+
+Sem `mensagem`, o jogo chama isto **uma vez por cópia**, ao criá-la, e usa o
+lote inteiro depois — não uma chamada por fala. Enquanto a resposta não chega, e se ela
 falhar, o lado Roblox usa uma lista fixa de reserva. A cópia nunca fica muda.
 
 O prompt proíbe explicitamente clichê de terror ("corra", "fuja", "eles vêm

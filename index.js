@@ -763,21 +763,40 @@ PERSONALIDADES:
 Responda APENAS com JSON puro, sem markdown:
 { "falas": ["...", "...", "..."] }`;
 
+//[[ Duas funcoes numa rota so, porque a persona e a mesma:
+//     sem "mensagem" devolve um lote de falas ambiente;
+//     com "mensagem" devolve UMA resposta, e a copia lembra da conversa. ]]
 app.post("/copias", async (req, res) => {
-    const { jogador, personalidade, quantidade } = req.body || {};
+    const { jogador, personalidade, quantidade, mensagem } = req.body || {};
     const quantas = Math.min(Math.max(Number(quantidade) || 6, 3), 10);
+    const conversando = typeof mensagem === "string" && mensagem.trim() !== "";
+
+    // A copia guarda a propria memoria, separada da do EXPLOSM.
+    const chave = "copia:" + (jogador || "?") + ":" + (personalidade || "?");
+    const registro = conversando ? historico(chave) : null;
 
     let texto = "";
 
     try {
+        if (conversando) {
+            registro.mensagens.push({ role: "user", content: mensagem });
+            if (registro.mensagens.length > MAX_MENSAGENS) {
+                registro.mensagens = registro.mensagens.slice(-MAX_MENSAGENS);
+            }
+        }
+
+        const instrucao = conversando
+            ? `Você é a cópia de ${jogador || "alguém"}, personalidade "${personalidade || "indiferente"}". O visitante acabou de dizer: "${mensagem}"
+
+Responda a ISSO — reaja ao que ele falou, não repita uma frase pronta sua. Uma fala só, curta, no formato { "falas": ["sua resposta"] }.`
+            : `Escreva ${quantas} falas para a cópia de ${jogador || "alguém"}, personalidade "${personalidade || "indiferente"}". Ela acabou de ver um visitante chegar.`;
+
         const resposta = await completar({
             max_tokens: 900,
             messages: [
                 { role: "system", content: PROMPT_COPIAS },
-                {
-                    role: "user",
-                    content: `Escreva ${quantas} falas para a cópia de ${jogador || "alguém"}, personalidade "${personalidade || "indiferente"}". Ela acabou de ver um visitante chegar.`,
-                },
+                ...(conversando ? registro.mensagens : []),
+                { role: "user", content: instrucao },
             ],
         });
 
@@ -792,10 +811,20 @@ app.post("/copias", async (req, res) => {
             throw new Error("sem falas");
         }
 
-        console.log(`Falas geradas para ${jogador} (${personalidade}): ${dados.falas.length}`);
-        res.json({ falas: dados.falas.map(String) });
+        const falas = dados.falas.map(String);
+
+        if (conversando) {
+            registro.mensagens.push({ role: "assistant", content: falas[0] });
+        }
+
+        console.log(`Copia de ${jogador} (${personalidade}): ${conversando ? "respondeu" : falas.length + " falas"}`);
+        res.json({ falas: falas });
 
     } catch (err) {
+        // A pergunta nao gerou resposta: nao deixa pendurada no historico.
+        if (conversando && registro) {
+            registro.mensagens.pop();
+        }
         console.error("Erro ao gerar falas de copia:", err.message);
         console.error("Texto recebido:", texto.substring(0, 200));
         // O jogo tem uma lista de reserva; devolver erro aqui nao quebra nada.
